@@ -8,7 +8,7 @@ export type Bindings = {
   JWT_SECRET: string;
 };
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: Bindings }>()
 
 app.use('*', cors());
 
@@ -124,3 +124,18 @@ app.get('/api/reports/summary', authMiddleware, async (c) => {
 });
 
 export default app;
+app.get('/', (c) => {
+  return c.json({
+    status: 'ok',
+    service: 'CRM API',
+    message: 'Backend is running',
+    endpoints: [
+      '/api/auth/login',
+      '/api/auth/me',
+      '/api/tickets',
+      '/api/leads',
+      '/api/upload',
+      '/api/reports/summary'
+    ]
+  });
+});
