@@ -19,12 +19,11 @@ export function ClientPortal() {
   // Load documents from billing register to match this project
   const [billingDocs, setBillingDocs] = useState<BillingDoc[]>([]);
   useEffect(() => {
-    const saved = localStorage.getItem("platform_billing_docs");
-    if (saved) {
-      try {
-        setBillingDocs(JSON.parse(saved));
-      } catch (e) {}
-    }
+    import("../lib/api").then(({ getKV }) => {
+      getKV("platform_billing_docs").then((res) => {
+        if (res) setBillingDocs(res);
+      }).catch(e => console.error(e));
+    });
   }, [selectedLeadId]);
 
   // Read current active lead metadata

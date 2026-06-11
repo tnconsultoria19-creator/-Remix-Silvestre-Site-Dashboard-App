@@ -40,25 +40,24 @@ export function Referrals() {
 
   // Load state from local storage on component mount
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_REFERRED);
-    if (saved) {
-      try {
-        setReferredAgents(JSON.parse(saved));
-      } catch (e) {
-        setReferredAgents(getDefaultReferrals());
-      }
-    } else {
-      const defaults = getDefaultReferrals();
-      setReferredAgents(defaults);
-      localStorage.setItem(STORAGE_KEY_REFERRED, JSON.stringify(defaults));
-    }
+    import("../lib/api").then(({ getKV }) => {
+      getKV(STORAGE_KEY_REFERRED).then(saved => {
+        if (saved) {
+          setReferredAgents(saved);
+        } else {
+          const defaults = getDefaultReferrals();
+          setReferredAgents(defaults);
+          import("../lib/api").then(({ setKV }) => setKV(STORAGE_KEY_REFERRED, defaults));
+        }
+      }).catch(() => {});
+    });
   }, [user]);
 
   const getDefaultReferrals = (): ReferralAgent[] => [];
 
   const updateReferralsState = (updated: ReferralAgent[]) => {
     setReferredAgents(updated);
-    localStorage.setItem(STORAGE_KEY_REFERRED, JSON.stringify(updated));
+    import("../lib/api").then(({ setKV }) => setKV(STORAGE_KEY_REFERRED, updated));
   };
 
   const copyToClipboard = () => {
@@ -188,7 +187,7 @@ export function Referrals() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Main Referral Information Box */}
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+          <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
             <div className="space-y-2">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider font-mono">Your Direct Referral Gateway</h3>
               <p className="text-xs text-slate-400">Share your custom link with your marketing lists, friends, or digital sales groups.</p>
@@ -225,124 +224,19 @@ export function Referrals() {
                 </a>
               </div>
             </div>
-
-            {/* Simulated Email Invite Form */}
-            <form onSubmit={handleSendInvite} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4 pt-4">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono flex items-center gap-1">
-                <span className="material-symbols-outlined text-slate-500 text-[16px]">alternate_email</span>
-                Simulate Sending Email Invitation
-              </h4>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 block">Friend's Name *</label>
-                  <input 
-                    type="text"
-                    required
-                    value={inviteName}
-                    onChange={(e) => setInviteName(e.target.value)}
-                    placeholder="e.g. Liam Thompson"
-                    className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-sans"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-600 block">Friend's Email *</label>
-                  <input 
-                    type="email"
-                    required
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="e.g. liam@marketingleads.com"
-                    className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-sans"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 block">Personal Message</label>
-                <textarea 
-                  value={inviteMsg}
-                  onChange={(e) => setInviteMsg(e.target.value)}
-                  rows={2}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-sans leading-relaxed text-slate-505"
-                />
-              </div>
-
-              <div className="flex justify-between items-center sm:pt-1">
-                <p className="text-[10px] text-slate-400 italic">This will launch a simulated outbound dispatch template.</p>
-                <button 
-                  type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-xs cursor-pointer select-none"
-                >
-                  Send Invitation
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {inviteSentAlert && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-medium"
-                  >
-                    {inviteSentAlert}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </form>
-          </div>
-
-          {/* Reward Milestones Tiers */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider font-mono">Commission Super-Chargers</h3>
-            
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 shrink-0">
-                  <span className="material-symbols-outlined text-[18px]">payments</span>
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800">10% Overriding Commission</h4>
-                  <p className="text-[10px] text-slate-400 leading-snug">Earn a baseline override on every dollar your referred contacts clear on their first 10 accounts.</p>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-3">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-mono block mb-2">Milestone Rewards Checklist:</span>
-                <div className="space-y-3">
-                  {[
-                    { title: "Bronze Tier: 1st Active Friend", progress: `${activeReferredCount}/1`, cleared: activeReferredCount >= 1 },
-                    { title: "Silver Tier: 5 Active Friends", progress: `${activeReferredCount}/5`, cleared: activeReferredCount >= 5 },
-                    { title: "Gold Tier: 10 Active Friends", progress: `${activeReferredCount}/10`, cleared: activeReferredCount >= 10 },
-                    { title: "Cash Match Bonus ($500 Extra)", progress: `${totalSalesCompleted}/25 Sales`, cleared: totalSalesCompleted >= 25 },
-                  ].map((tier, index) => (
-                    <div key={index} className="flex justify-between items-center bg-slate-50 border border-slate-100 rounded-xl p-2.5 px-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`material-symbols-outlined text-[16px] text-emerald-600 ${tier.cleared ? 'text-teal-600 font-bold' : 'text-slate-350 opacity-55'}`}>
-                          {tier.cleared ? "check_circle" : "radio_button_unchecked"}
-                        </span>
-                        <span className={`text-[11px] font-semibold ${tier.cleared ? 'text-slate-800 line-through' : 'text-slate-600'}`}>{tier.title}</span>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-indigo-600 font-mono tracking-tight">{tier.progress}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Live Network Playground and Interactive Sandbox */}
+        {/* Live Network Dashboard */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Left Table Panel: network stats */}
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col justify-between">
+          <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col justify-between">
             <div>
               <div className="p-6 border-b border-slate-200 bg-white flex justify-between items-center">
                 <div className="space-y-0.5">
-                  <h4 className="font-extrabold text-slate-900 text-sm">Referred Representatives & Interactive Pipeline</h4>
-                  <p className="text-[11px] text-slate-400">View and trigger performance mockups to simulate live overrides flow.</p>
+                  <h4 className="font-extrabold text-slate-900 text-sm">Referred Representatives & Pipeline</h4>
+                  <p className="text-[11px] text-slate-400">View performance of your referred contacts globally.</p>
                 </div>
                 <div className="px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg font-mono">
                   {referredAgents.length} Enlisted Contacts
@@ -357,13 +251,12 @@ export function Referrals() {
                       <th className="px-6 py-3.5">Join Date</th>
                       <th className="px-6 py-3.5 text-center">Overrides Progress</th>
                       <th className="px-6 py-3.5">Status</th>
-                      <th className="px-6 py-3.5 text-right">Interactive sandbox</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {referredAgents.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">No invitees registered. Use the links or sandbox forms above to trigger some signups!</td>
+                        <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">No invitees registered. You can use your direct referral link above to invite them!</td>
                       </tr>
                     ) : (
                       referredAgents.map((agent) => (
@@ -397,34 +290,6 @@ export function Referrals() {
                               {agent.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            {agent.status === "Invited" ? (
-                              <button 
-                                onClick={() => {
-                                  const updated = referredAgents.map(a => {
-                                    if (a.id === agent.id) {
-                                      return { ...a, status: "Active" as const, joinedDate: "Just signed up!" };
-                                    }
-                                    return a;
-                                  });
-                                  updateReferralsState(updated);
-                                }}
-                                className="px-2.5 py-1 text-[11px] font-bold text-slate-700 border border-slate-300 rounded-lg hover:border-indigo-600 bg-white hover:text-indigo-600 transition"
-                              >
-                                Simulate Join
-                              </button>
-                            ) : agent.status === "Active" && agent.salesCompleted < agent.maxSales ? (
-                              <button 
-                                onClick={() => handleSimulateSale(agent.id)}
-                                className="px-2 py-1 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition"
-                                title="Add a sale to see how overriding commissions scale live"
-                              >
-                                + Force Sale ($124.50)
-                              </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 font-medium italic">Eligibility Expired</span>
-                            )}
-                          </td>
                         </tr>
                       ))
                     )}
@@ -438,7 +303,7 @@ export function Referrals() {
             </div>
           </div>
 
-          {/* Right Panel: Interactive Sandbox Simulation forms */}
+          {/* Right Panel: Scoring and metrics */}
           <div className="space-y-6">
             
             {/* Live overriding override status scoreboard */}
@@ -458,63 +323,6 @@ export function Referrals() {
                   <span className="text-[10px] text-emerald-400 block font-medium mt-0.5">• Fully unlocked overrides yield</span>
                 </div>
               </div>
-            </div>
-
-            {/* Test Invite Signup Sandbox form */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-mono flex items-center gap-1">
-                <span className="material-symbols-outlined text-indigo-500 text-[16px]">psychology</span>
-                Referral Link Sandbox Sandbox
-              </h4>
-              <p className="text-[11px] text-slate-400 leading-normal">
-                Want to test out how your referred representatives populate? Enter details to simulate a prospect instantly clicking your link and registering!
-              </p>
-
-              <form onSubmit={handleSimulateSignup} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600 block">Simulate Name</label>
-                  <input 
-                    type="text"
-                    required
-                    value={testName}
-                    onChange={(e) => setTestName(e.target.value)}
-                    placeholder="e.g. Reny Chen"
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-sans font-medium text-slate-705"
-                  />
-                </div>
-                
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-600 block">Simulate Email</label>
-                  <input 
-                    type="email"
-                    required
-                    value={testEmail}
-                    onChange={(e) => setTestEmail(e.target.value)}
-                    placeholder="e.g. rchen@gmail.com"
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-sans font-medium text-slate-705"
-                  />
-                </div>
-
-                <button 
-                  type="submit"
-                  className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-extrabold hover:bg-slate-800 cursor-pointer select-none"
-                >
-                  Test Referral Signup
-                </button>
-              </form>
-
-              <AnimatePresence>
-                {testSuccessMessage && (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="p-3 bg-indigo-50 border border-indigo-150 text-indigo-800 rounded-xl text-xs leading-relaxed"
-                  >
-                    {testSuccessMessage}
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
 
           </div>

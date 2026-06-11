@@ -31,17 +31,14 @@ export function AccountsDashboard() {
   const { user } = useAuth();
   const { leads, convertPrice } = useJobs();
 
-  const [docs, setDocs] = useState<BillingDoc[]>(() => {
-    const saved = localStorage.getItem("platform_billing_docs");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [];
-  });
+  const [docs, setDocs] = useState<BillingDoc[]>([]);
+  useEffect(() => {
+    import("../lib/api").then(({ getKV }) => {
+      getKV("platform_billing_docs").then((res) => {
+        if (res) setDocs(res);
+      }).catch(e => console.error(e));
+    });
+  }, []);
 
   const [activeTab, setActiveTab] = useState<"All" | "Invoice" | "Quote" | "Receipt" | "Billing">("All");
   const [selectedDoc, setSelectedDoc] = useState<BillingDoc | null>(null);
@@ -75,42 +72,46 @@ export function AccountsDashboard() {
   const [profileBankIban, setProfileBankIban] = useState("");
   const [profileBankSwift, setProfileBankSwift] = useState("");
 
-  // Save docs to localStorage
+  // Save docs to KV
   useEffect(() => {
-    localStorage.setItem("platform_billing_docs", JSON.stringify(docs));
+    if (docs.length > 0) {
+       import("../lib/api").then(({ setKV }) => setKV("platform_billing_docs", docs));
+    }
   }, [docs]);
 
   // Load all agents registered for dropdown edit in admin mode
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("platform_agents") || "[]");
-      setAllAgents(stored);
-    } catch(e){}
+    import("../lib/api").then(({ apiFetch }) => {
+      apiFetch("/api/agents").then(res => setAllAgents(res)).catch(() => {});
+    });
     setBillingTargetEmail(user?.email || "");
   }, [user]);
 
   // Dynamic live loading of billing profile matching targeted agent
   useEffect(() => {
     const target = billingTargetEmail || user?.email || "unknown@agencypro.com";
-    try {
-      const stored = JSON.parse(localStorage.getItem(`billing_profile_${target}`) || "{}");
-      setProfileName(stored.legalName || "");
-      setProfileCompany(stored.companyName || "");
-      setProfileAddress(stored.address || "");
-      setProfileTaxId(stored.taxId || "");
-      setProfileBankIban(stored.iban || "");
-      setProfileBankSwift(stored.swift || "");
-    } catch (e) {
-      setProfileName("");
-      setProfileCompany("");
-      setProfileAddress("");
-      setProfileTaxId("");
-      setProfileBankIban("");
-      setProfileBankSwift("");
-    }
+    import("../lib/api").then(({ getKV }) => {
+       getKV(`billing_profile_${target}`).then(stored => {
+          if (stored) {
+            setProfileName(stored.legalName || "");
+            setProfileCompany(stored.companyName || "");
+            setProfileAddress(stored.address || "");
+            setProfileTaxId(stored.taxId || "");
+            setProfileBankIban(stored.iban || "");
+            setProfileBankSwift(stored.swift || "");
+          } else {
+            setProfileName("");
+            setProfileCompany("");
+            setProfileAddress("");
+            setProfileTaxId("");
+            setProfileBankIban("");
+            setProfileBankSwift("");
+          }
+       }).catch(() => {});
+    });
   }, [billingTargetEmail, user]);
 
-  const handleSaveBillingProfile = (e: React.FormEvent) => {
+  const handleSaveBillingProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     const target = billingTargetEmail || user?.email || "unknown@agencypro.com";
     const payload = {
@@ -121,7 +122,8 @@ export function AccountsDashboard() {
       iban: profileBankIban,
       swift: profileBankSwift
     };
-    localStorage.setItem(`billing_profile_${target}`, JSON.stringify(payload));
+    const { setKV } = await import("../lib/api");
+    await setKV(`billing_profile_${target}`, payload);
     alert(`Billing Profile credentials for ${target} saved securely!`);
   };
 
@@ -282,14 +284,15 @@ export function AccountsDashboard() {
   };
 
   // high-fidelity PDF Generation (REQ EXPLICIT RESOLVE!)
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!selectedDoc) return;
     
     // Attempt to load profile credentials of the issuer
     const issuer = selectedDoc.issuerEmail || user?.email || "unknown@agencypro.com";
     let storedProfile: any = {};
     try {
-      storedProfile = JSON.parse(localStorage.getItem(`billing_profile_${issuer}`) || "{}");
+      const { getKV } = await import("../lib/api");
+      storedProfile = await getKV(`billing_profile_${issuer}`) || {};
     } catch(e){}
 
     const pName = storedProfile.legalName || "Not configured";

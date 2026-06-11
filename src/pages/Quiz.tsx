@@ -11,10 +11,13 @@ export function Quiz() {
   const [customHtml, setCustomHtml] = useState<string | null>(null);
 
   useEffect(() => {
-     const stored = localStorage.getItem('admin_quiz_html');
-     if (stored && stored.trim() !== '') {
-        setCustomHtml(stored);
-     }
+     import("../lib/api").then(({ getKV }) => {
+       getKV('admin_quiz_html').then(stored => {
+         if (stored && stored.trim() !== '') {
+            setCustomHtml(stored);
+         }
+       }).catch(() => {});
+     });
   }, []);
 
   if (user?.didPassQuiz && !user?.isApproved) {

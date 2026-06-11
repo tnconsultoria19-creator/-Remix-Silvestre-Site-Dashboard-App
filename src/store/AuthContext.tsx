@@ -33,8 +33,8 @@ interface AuthContextType {
   agents: Agent[];
   impersonatingFrom: User | null;
   loadAgents: () => Promise<void>;
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
-  register: (email: string, password?: string, name?: string, bypassTraining?: boolean, whatsapp?: string, country?: string, languages?: string, experience?: string) => Promise<void>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string; user?: User }>;
+  register: (email: string, password?: string, name?: string, bypassTraining?: boolean, whatsapp?: string, country?: string, languages?: string, experience?: string) => Promise<User | undefined>;
   logout: () => void;
   passQuiz: () => Promise<void>;
   approveUser: () => Promise<void>;
@@ -54,10 +54,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [impersonatingFrom, setImpersonatingFrom] = useState<User | null>(() => {
-    const savedImpersonating = localStorage.getItem("platform_impersonating_from");
-    return savedImpersonating ? JSON.parse(savedImpersonating) : null;
-  });
+  const [impersonatingFrom, setImpersonatingFrom] = useState<User | null>(null);
 
   useEffect(() => {
     // Attempt to load session if token exists
@@ -90,11 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, impersonatingFrom]);
 
   useEffect(() => {
-    if (impersonatingFrom) {
-      localStorage.setItem("platform_impersonating_from", JSON.stringify(impersonatingFrom));
-    } else {
-      localStorage.removeItem("platform_impersonating_from");
-    }
+    // Session state synchronized
   }, [impersonatingFrom]);
 
   const login = async (email: string, password?: string) => {
@@ -105,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setUser(response.user);
       setAuthToken(response.user.token);
-      return { success: true };
+      return { success: true, user: response.user };
     } catch (e: any) {
       return { success: false, error: e.message || "Login failed" };
     }
@@ -130,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setUser(response.user);
       setAuthToken(response.user.token);
+      return response.user;
     } catch (e: any) {
       throw new Error(e.message || "Registration failed");
     }
@@ -139,7 +133,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setImpersonatingFrom(null);
     clearAuthToken();
-    localStorage.removeItem("platform_impersonating_from");
   };
 
   const passQuiz = async () => {
@@ -274,7 +267,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (impersonatingFrom) {
       setUser(impersonatingFrom);
       setImpersonatingFrom(null);
-      localStorage.removeItem("platform_impersonating_from");
     }
   };
 

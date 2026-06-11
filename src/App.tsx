@@ -68,7 +68,7 @@ function InitialRoute() {
      const params = new URLSearchParams(window.location.search);
      const ref = params.get('ref');
      if (ref) {
-        localStorage.setItem('referred_by', ref);
+        import("./lib/api").then(({ setKV }) => setKV('referred_by', ref));
         window.history.replaceState({}, '', '/');
      }
   }, []);

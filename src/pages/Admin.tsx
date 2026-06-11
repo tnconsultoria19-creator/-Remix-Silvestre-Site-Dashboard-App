@@ -68,7 +68,14 @@ export function Admin() {
 
   // Quiz HTML editor state
   const [showQuizEditor, setShowQuizEditor] = useState(false);
-  const [quizHtml, setQuizHtml] = useState(localStorage.getItem("admin_quiz_html") || "");
+  const [quizHtml, setQuizHtml] = useState("");
+  useEffect(() => {
+    import("../lib/api").then(({ getKV }) => {
+      getKV("admin_quiz_html").then(res => {
+         if (res) setQuizHtml(res);
+      }).catch(() => {});
+    });
+  }, []);
   const [saveStatus, setSaveStatus] = useState("");
 
   // Search/Filter states
@@ -101,21 +108,21 @@ export function Admin() {
 
   // Load resources & modules
   useEffect(() => {
-    try {
-      const res = JSON.parse(localStorage.getItem("admin_resources") || "[]");
-      setAdminResources(res);
-    } catch (e) {}
+    import("../lib/api").then(({ getKV, setKV }) => {
+      getKV("admin_resources").then(res => {
+        if (res) setAdminResources(res);
+      }).catch(() => {});
 
-    try {
-      const rawModules = localStorage.getItem("platform_modules");
-      if (rawModules) {
-        setModules(JSON.parse(rawModules));
-      } else {
-        const defaultModules = [];
-        localStorage.setItem("platform_modules", JSON.stringify(defaultModules));
-        setModules(defaultModules);
-      }
-    } catch (e) {}
+      getKV("platform_modules").then(rawModules => {
+        if (rawModules) {
+          setModules(rawModules);
+        } else {
+          const defaultModules: any[] = [];
+          setKV("platform_modules", defaultModules);
+          setModules(defaultModules);
+        }
+      }).catch(() => {});
+    });
   }, [activeTab]);
 
   // Block access to non-admins
@@ -250,7 +257,7 @@ export function Admin() {
       alert(`New curriculum Module "${modTitle}" deployed to Agent Academy!`);
     }
 
-    localStorage.setItem("platform_modules", JSON.stringify(updatedModules));
+    import("../lib/api").then(({ setKV }) => setKV("platform_modules", updatedModules));
     setModules(updatedModules);
     
     setSelectedModule(null);
@@ -275,7 +282,7 @@ export function Admin() {
   const handleDeleteModule = (id: number) => {
     if (confirm("Are you sure you want to permanently remove this training module?")) {
       const remaining = modules.filter(m => m.id !== id);
-      localStorage.setItem("platform_modules", JSON.stringify(remaining));
+      import("../lib/api").then(({ setKV }) => setKV("platform_modules", remaining));
       setModules(remaining);
     }
   };
@@ -283,39 +290,43 @@ export function Admin() {
   // Save Extra Sourced study asset
   const handleSaveResource = () => {
     if (resourceLink && resourceTitle) {
-      let existing: any[] = [];
-      try {
-        existing = JSON.parse(localStorage.getItem("admin_resources") || "[]");
-      } catch (e) {}
-      
-      existing.push({ 
-        title: resourceTitle, 
-        url: resourceLink, 
-        type: resourceLink.toLowerCase().includes(".pdf") ? "pdf" : "link" 
+      import("../lib/api").then(({ getKV, setKV }) => {
+        getKV("admin_resources").then(existingRaw => {
+          const existing = existingRaw || [];
+          existing.push({ 
+            title: resourceTitle, 
+            url: resourceLink, 
+            type: resourceLink.toLowerCase().includes(".pdf") ? "pdf" : "link" 
+          });
+          setKV("admin_resources", existing);
+          setAdminResources(existing);
+          setShowAddResource(false);
+          setResourceLink("");
+          setResourceTitle("");
+        }).catch(() => {});
       });
-      localStorage.setItem("admin_resources", JSON.stringify(existing));
-      setAdminResources(existing);
-      setShowAddResource(false);
-      setResourceLink("");
-      setResourceTitle("");
     }
   };
 
   // Remove Sourced study asset
   const handleRemoveResource = (index: number) => {
-    try {
-      const existing = JSON.parse(localStorage.getItem("admin_resources") || "[]");
-      existing.splice(index, 1);
-      localStorage.setItem("admin_resources", JSON.stringify(existing));
-      setAdminResources(existing);
-    } catch(e) {}
+    import("../lib/api").then(({ getKV, setKV }) => {
+      getKV("admin_resources").then(existingRaw => {
+        const existing = existingRaw || [];
+        existing.splice(index, 1);
+        setKV("admin_resources", existing);
+        setAdminResources(existing);
+      }).catch(() => {});
+    });
   };
 
   // Save Quiz Markup template
   const handleSaveQuiz = () => {
-    localStorage.setItem("admin_quiz_html", quizHtml);
-    setSaveStatus("Custom Quiz schema published successfully.");
-    setTimeout(() => setSaveStatus(""), 3000);
+    import("../lib/api").then(({ setKV }) => {
+       setKV("admin_quiz_html", quizHtml);
+       setSaveStatus("Custom Quiz schema published successfully.");
+       setTimeout(() => setSaveStatus(""), 3000);
+    });
   };
 
   // Edit triggers for existing Lead

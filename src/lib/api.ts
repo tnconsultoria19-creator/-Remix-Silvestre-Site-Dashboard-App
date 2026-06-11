@@ -1,17 +1,32 @@
 // API utility to handle Cloudflare Worker requests
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://lead-marketplace-api.your-username.workers.dev";
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "https://lead-marketplace-api.your-username.workers.dev";
 
 export function getAuthToken() {
-  return localStorage.getItem("token") || "";
+  const name = "token=";
+  const decodedCookie = decodeURIComponent(document.cookie);
+  const ca = decodedCookie.split(';');
+  for(let i = 0; i <ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) == ' ') {
+      c = c.substring(1);
+    }
+    if (c.indexOf(name) == 0) {
+      return c.substring(name.length, c.length);
+    }
+  }
+  return "";
 }
 
 export function setAuthToken(token: string) {
-  localStorage.setItem("token", token);
+  const d = new Date();
+  d.setTime(d.getTime() + (7*24*60*60*1000));
+  const expires = "expires="+ d.toUTCString();
+  document.cookie = "token=" + token + ";" + expires + ";path=/";
 }
 
 export function clearAuthToken() {
-  localStorage.removeItem("token");
+  document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 }
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {

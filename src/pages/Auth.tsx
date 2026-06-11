@@ -22,12 +22,11 @@ export function Auth() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
-    const isAdministrative = cleanEmail.includes('admin') || cleanEmail === 'olisbel@gmail.com';
     
     if (isLogin) {
       const res = await login(email, password);
       if (res?.success) {
-        if (isAdministrative) {
+        if (res.user?.isAdmin || res.user?.isSuperAdmin) {
            navigate("/admin");
         } else {
            navigate("/dashboard");
@@ -37,8 +36,8 @@ export function Auth() {
       }
     } else {
       try {
-        await register(email, password, name, bypassTraining, whatsapp, country, languages, experience);
-        if (isAdministrative) {
+        const user = await register(email, password, name, bypassTraining, whatsapp, country, languages, experience);
+        if (user?.isAdmin || user?.isSuperAdmin) {
            navigate("/admin");
         } else if (bypassTraining) {
            navigate("/dashboard"); // bypasses academy
