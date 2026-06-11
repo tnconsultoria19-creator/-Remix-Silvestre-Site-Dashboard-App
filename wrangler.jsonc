@@ -1,5 +1,5 @@
 {
-  "name": "crm-ticket-platform",
+  "name": "remixsilvestresitedashboardapp",
   "main": "src/backend/index.ts",
   "compatibility_date": "2024-04-01",
   "compatibility_flags": ["nodejs_compat"],
