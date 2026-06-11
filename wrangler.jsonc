@@ -1,33 +1,21 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "crm-ticket-platform",
   "main": "src/backend/index.ts",
   "compatibility_date": "2024-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "enabled": true
-  },
+
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "crm_db",
-      "database_id": "REPLACE_WITH_YOUR_D1_ID",
-      "migrations_dir": "migrations"
+      "database_id": "dbe78523-f6db-44df-8322-8f8e378ad577"
     }
   ],
+
   "r2_buckets": [
     {
-      "binding": "STORAGE",
+      "binding": "FILES",
       "bucket_name": "crm-assets"
     }
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "CACHE",
-      "id": "REPLACE_WITH_YOUR_KV_ID"
-    }
-  ],
-  "vars": {
-    "JWT_SECRET": "replace-with-a-very-secure-jwt-secret-in-production"
-  }
+  ]
 }
