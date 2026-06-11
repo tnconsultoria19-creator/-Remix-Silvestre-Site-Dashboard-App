@@ -19,26 +19,34 @@ export function Auth() {
   const { t } = useI18n();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
     const isAdministrative = cleanEmail.includes('admin') || cleanEmail === 'olisbel@gmail.com';
     
     if (isLogin) {
-      login(email, password);
-      if (isAdministrative) {
-         navigate("/admin");
+      const res = await login(email, password);
+      if (res?.success) {
+        if (isAdministrative) {
+           navigate("/admin");
+        } else {
+           navigate("/dashboard");
+        }
       } else {
-         navigate("/dashboard");
+        alert(res?.error || "Login Failed");
       }
     } else {
-      register(email, password, name, bypassTraining);
-      if (isAdministrative) {
-         navigate("/admin");
-      } else if (bypassTraining) {
-         navigate("/dashboard"); // bypasses academy
-      } else {
-         navigate("/resources"); // Agent first registers, sent to academy
+      try {
+        await register(email, password, name, bypassTraining, whatsapp, country, languages, experience);
+        if (isAdministrative) {
+           navigate("/admin");
+        } else if (bypassTraining) {
+           navigate("/dashboard"); // bypasses academy
+        } else {
+           navigate("/resources"); // Agent first registers, sent to academy
+        }
+      } catch (err: any) {
+        alert(err.message || "Registration Failed");
       }
     }
   };
@@ -194,18 +202,6 @@ export function Auth() {
               {isLogin ? "Apply Now" : "Sign In"}
             </button>
           </div>
-          
-          <button 
-             onClick={() => {
-                setEmail('olisbel@gmail.com');
-                setPassword('19921108626');
-                setIsLogin(true);
-             }}
-             className="text-[11px] text-on-surface-variant/60 hover:text-primary transition-colors flex items-center gap-1"
-          >
-             <span className="material-symbols-outlined text-[14px]">shield_person</span>
-             Admin Quick Login
-          </button>
         </div>
       </div>
     </div>

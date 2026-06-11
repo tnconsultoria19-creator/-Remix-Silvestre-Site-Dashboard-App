@@ -65,20 +65,23 @@ export function Landing() {
               <p>{t("landing.trusted.textp2")}</p>
             </div>
           </div>
-          <div className="relative">
-            <div className="saas-card p-6 bg-[#FAFAFA] flex flex-col gap-4">
-              <div className="flex items-center gap-3 border-b border-[rgba(0,0,0,0.06)] pb-4">
-                <div className="w-10 h-10 rounded-lg bg-white border border-[rgba(0,0,0,0.06)] shadow-sm flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary">storefront</span>
+          <div className="relative z-10">
+            <div className="saas-card overflow-hidden">
+              <img src="https://images.pexels.com/photos/17767237/pexels-photo-17767237.jpeg" alt="Agent Working" className="w-full h-48 object-cover" />
+              <div className="p-6 bg-[#FAFAFA] flex flex-col gap-4">
+                <div className="flex items-center gap-3 border-b border-[rgba(0,0,0,0.06)] pb-4">
+                  <div className="w-10 h-10 rounded-lg bg-white border border-[rgba(0,0,0,0.06)] shadow-sm flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary">storefront</span>
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm text-on-surface">{t("landing.trusted.card.title")}</div>
+                    <div className="text-xs text-on-surface-variant">{t("landing.trusted.card.subtitle")}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-medium text-sm text-on-surface">{t("landing.trusted.card.title")}</div>
-                  <div className="text-xs text-on-surface-variant">{t("landing.trusted.card.subtitle")}</div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-sm font-medium text-on-surface">{t("landing.trusted.card.comission")}</span>
+                  <button className="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm">{t("landing.trusted.card.action")}</button>
                 </div>
-              </div>
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-sm font-medium text-on-surface">{t("landing.trusted.card.comission")}</span>
-                <button className="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-md shadow-sm">{t("landing.trusted.card.action")}</button>
               </div>
             </div>
           </div>
@@ -111,8 +114,12 @@ export function Landing() {
       </section>
 
       {/* Why Agents Love The Platform */}
-      <section className="py-24 bg-white border-y border-[rgba(0,0,0,0.06)] px-6">
-        <div className="max-w-6xl mx-auto">
+      <section className="relative py-24 border-y border-[rgba(0,0,0,0.06)] px-6 overflow-hidden">
+        <div className="absolute inset-0">
+          <img src="https://images.pexels.com/photos/35470492/pexels-photo-35470492.jpeg" alt="Background" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-white/90 backdrop-blur-md"></div>
+        </div>
+        <div className="relative max-w-6xl mx-auto z-10">
           <div className="mb-16 md:w-1/2">
             <h2 className="text-3xl font-semibold tracking-tight text-on-surface mb-4 flex items-center gap-3">
               <span className="material-symbols-outlined text-primary text-[32px]">favorite</span>
@@ -129,7 +136,7 @@ export function Landing() {
               { icon: 'school', title: t("landing.benefits.card5.title"), desc: t("landing.benefits.card5.desc") },
               { icon: 'groups', title: t("landing.benefits.card6.title"), desc: t("landing.benefits.card6.desc") }
             ].map((b, i) => (
-              <div key={i} className="p-6 border border-[rgba(0,0,0,0.06)] rounded-xl bg-[#FAFAFA] hover:bg-white transition-all transform hover:-translate-y-1">
+              <div key={i} className="p-6 border border-[rgba(0,0,0,0.06)] rounded-xl bg-white/80 hover:bg-white transition-all shadow-sm hover:shadow-md transform hover:-translate-y-1">
                 <span className="material-symbols-outlined text-primary mb-4 text-[28px]">{b.icon}</span>
                 <h3 className="font-semibold text-on-surface mb-2">{b.title}</h3>
                 <p className="text-[14px] text-on-surface-variant">{b.desc}</p>
@@ -154,21 +161,29 @@ export function Landing() {
             <span className="text-2xl font-bold text-primary">Uncapped Scale</span>
           </div>
         </div>
-        <div className="saas-card p-10 bg-gradient-to-br from-white to-[#FAFAFA]">
-          <h3 className="text-2xl font-semibold tracking-tight text-on-surface mb-4 flex items-center gap-2">
-             <span className="material-symbols-outlined text-primary">group_add</span>
-            {t("landing.referral.title")}
-          </h3>
-          <p className="text-[15px] text-on-surface-variant leading-relaxed mb-6">
-             {t("landing.referral.desc")}
-          </p>
-          <Link to="/register" className="saas-button saas-button-secondary">Learn about Referrals</Link>
+        
+        <div className="saas-card p-0 overflow-hidden flex flex-col">
+          <img src="https://images.pexels.com/photos/5586319/pexels-photo-5586319.jpeg" alt="Referrals" className="w-full h-40 object-cover" />
+          <div className="p-10 bg-gradient-to-br from-white to-[#FAFAFA] flex-1">
+            <h3 className="text-2xl font-semibold tracking-tight text-on-surface mb-4 flex items-center gap-2">
+               <span className="material-symbols-outlined text-primary">group_add</span>
+              {t("landing.referral.title")}
+            </h3>
+            <p className="text-[15px] text-on-surface-variant leading-relaxed mb-6">
+               {t("landing.referral.desc")}
+            </p>
+            <Link to="/register" className="saas-button saas-button-secondary">Learn about Referrals</Link>
+          </div>
         </div>
       </section>
 
       {/* Training Center & CTA */}
-      <section className="py-32 bg-white border-t border-[rgba(0,0,0,0.06)] px-6 text-center">
-        <div className="max-w-3xl mx-auto flex flex-col items-center">
+      <section className="relative py-32 border-t border-[rgba(0,0,0,0.06)] px-6 text-center overflow-hidden">
+        <div className="absolute inset-0">
+          <img src="https://images.pexels.com/photos/37515880/pexels-photo-37515880.jpeg" alt="Background" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-white/85 backdrop-blur-md"></div>
+        </div>
+        <div className="relative max-w-3xl mx-auto flex flex-col items-center z-10">
           <div className="w-16 h-16 rounded-2xl bg-[#FAFAFA] border border-[rgba(0,0,0,0.06)] flex items-center justify-center mb-8 shadow-sm">
             <span className="material-symbols-outlined text-3xl text-primary">school</span>
           </div>

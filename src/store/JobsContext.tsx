@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useI18n } from "./I18nContext";
+import { apiFetch } from "../lib/api";
 
 export interface ContactPerson {
   name: string;
@@ -72,15 +73,16 @@ interface Notification {
 interface JobsContextType {
   leads: Lead[];
   notifications: Notification[];
-  addLead: (lead: Partial<Lead>) => void;
-  updateLead: (id: string, updated: Partial<Lead>) => void;
-  claimLead: (id: string, agentEmail: string) => void;
-  unclaimLead: (id: string) => void;
-  reassignLead: (id: string, agentEmail: string) => void;
-  addLeadNote: (leadId: string, text: string, author: string) => void;
-  addLeadCustomField: (leadId: string, title: string, value: string) => void;
-  uploadLeadFile: (leadId: string, fileName: string, fileUrl: string, uploadedBy: string) => void;
-  issueCommissionPayment: (leadId: string, proofName: string, proofUrl: string) => void;
+  loadLeads: () => Promise<void>;
+  addLead: (lead: Partial<Lead>) => Promise<void>;
+  updateLead: (id: string, updated: Partial<Lead>) => Promise<void>;
+  claimLead: (id: string, agentEmail: string) => Promise<void>;
+  unclaimLead: (id: string) => Promise<void>;
+  reassignLead: (id: string, agentEmail: string) => Promise<void>;
+  addLeadNote: (leadId: string, text: string, author: string) => Promise<void>;
+  addLeadCustomField: (leadId: string, title: string, value: string) => Promise<void>;
+  uploadLeadFile: (leadId: string, fileName: string, fileUrl: string, uploadedBy: string) => Promise<void>;
+  issueCommissionPayment: (leadId: string, proofName: string, proofUrl: string) => Promise<void>;
   removeNotification: (id: string) => void;
   
   // Conversion helper
@@ -91,221 +93,217 @@ interface JobsContextType {
   setGlobalCurrency: (curr: "USD" | "EUR" | "BRL" | "MZN" | "ZAR") => void;
 
   // Lead deletions
-  deleteLead: (id: string) => void;
+  deleteLead: (id: string) => Promise<void>;
 }
 
 const JobsContext = createContext<JobsContextType | undefined>(undefined);
 
-const initialLeads: Lead[] = [];
-
 export function JobsProvider({ children }: { children: React.ReactNode }) {
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    const savedLeads = localStorage.getItem("platform_leads");
-    if (savedLeads) {
-      try {
-        return JSON.parse(savedLeads);
-      } catch (e) {
-        return initialLeads;
-      }
-    }
-    localStorage.setItem("platform_leads", JSON.stringify(initialLeads));
-    return initialLeads;
-  });
-
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   // Enforce master global currency (default "USD")
-  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "EUR" | "BRL" | "MZN" | "ZAR">(() => {
-    return (localStorage.getItem("global_currency") as any) || "USD";
-  });
+  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "EUR" | "BRL" | "MZN" | "ZAR">(("USD"));
+
+  const loadLeads = async () => {
+    try {
+      const data = await apiFetch("/api/leads");
+      setLeads(data);
+    } catch (e) {
+      console.error("Failed to fetch leads");
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem("global_currency", globalCurrency);
-  }, [globalCurrency]);
+    loadLeads();
+  }, []);
 
-  useEffect(() => {
-    localStorage.setItem("platform_leads", JSON.stringify(leads));
-  }, [leads]);
-
-  const addLead = (lead: Partial<Lead>) => {
-    const randomId = "L-" + Math.floor(1000 + Math.random() * 9000);
-    const newLead: Lead = {
-      id: randomId,
-      name: lead.name || "Unnamed Prospect",
-      industry: lead.industry || "General",
-      country: lead.country || "United States",
-      estValue: lead.estValue || 1500,
-      payout: lead.payout || (lead.estValue ? Math.round(lead.estValue * 0.2) : 300),
-      earningsCurrency: lead.earningsCurrency || "USD",
-      status: lead.status || "Available",
-      claimedBy: lead.claimedBy,
-      contactPerson: lead.contactPerson || { name: "", email: "", phone: "", role: "" },
-      socials: lead.socials || {},
-      prototypeUrl: lead.prototypeUrl || "https://example.com",
-      notes: [{ id: "n-init", author: "Platform System", text: "Lead registered in marketplace.", date: new Date().toISOString().slice(0, 10) }],
-      customFields: lead.customFields || [],
-      uploads: [],
-      description: lead.description || "",
-      isFrozen: false
-    };
-
-    setLeads(prev => [newLead, ...prev]);
-    setNotifications(prev => [
-      { id: Math.random().toString(), message: `New Lead Added: ${newLead.name}` },
-      ...prev
-    ]);
+  const addLead = async (lead: Partial<Lead>) => {
+    try {
+      await apiFetch("/api/leads", {
+        method: "POST",
+        body: JSON.stringify(lead)
+      });
+      await loadLeads();
+      setNotifications(prev => [
+        { id: Math.random().toString(), message: `New Lead Added: ${lead.name}` },
+        ...prev
+      ]);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const updateLead = (id: string, updated: Partial<Lead>) => {
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updated } : l));
+  const updateLead = async (id: string, updated: Partial<Lead>) => {
+    try {
+      await apiFetch(`/api/leads/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(updated)
+      });
+      await loadLeads();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const deleteLead = (id: string) => {
-    setLeads(prev => prev.filter(l => l.id !== id));
-    setNotifications(prev => [
-      { id: Math.random().toString(), message: `Lead ${id} has been permanently deleted.` },
-      ...prev
-    ]);
+  const deleteLead = async (id: string) => {
+    try {
+      await apiFetch(`/api/leads/${id}`, {
+        method: "DELETE"
+      });
+      await loadLeads();
+      setNotifications(prev => [
+        { id: Math.random().toString(), message: `Lead ${id} has been permanently deleted.` },
+        ...prev
+      ]);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const claimLead = (id: string, agentEmail: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === id) {
-        if (l.isFrozen) return l; // Do not allow claiming frozen leads
-        return {
-          ...l,
-          status: "Claimed" as const,
+  const claimLead = async (id: string, agentEmail: string) => {
+    try {
+      await apiFetch(`/api/leads/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          status: "Claimed", 
           claimedBy: agentEmail,
-          notes: [
-            ...l.notes,
-            { id: Math.random().toString(), author: "Platform System", text: `Opportunity claimed by agent (${agentEmail})`, date: new Date().toISOString().slice(0, 10) }
-          ]
-        };
-      }
-      return l;
-    }));
+          newNote: {
+            author: "Platform System",
+            text: `Opportunity claimed by agent (${agentEmail})`,
+            date: new Date().toISOString().slice(0, 10)
+          }
+        })
+      });
+      await loadLeads();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const unclaimLead = (id: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === id) {
-        return {
-          ...l,
-          status: "Available" as const,
-          claimedBy: undefined,
-          notes: [
-            ...l.notes,
-            { id: Math.random().toString(), author: "Platform System", text: "Opportunity released back to Marketplace.", date: new Date().toISOString().slice(0, 10) }
-          ]
-        };
-      }
-      return l;
-    }));
+  const unclaimLead = async (id: string) => {
+    try {
+      await apiFetch(`/api/leads/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          status: "Available", 
+          claimedBy: null,
+          newNote: {
+            author: "Platform System",
+            text: `Opportunity released back to Marketplace.`,
+            date: new Date().toISOString().slice(0, 10)
+          }
+        })
+      });
+      await loadLeads();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const reassignLead = (id: string, agentEmail: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === id) {
-        const isSelfunclaim = !agentEmail;
-        return {
-          ...l,
-          status: isSelfunclaim ? ("Available" as const) : ("Claimed" as const),
-          claimedBy: isSelfunclaim ? undefined : agentEmail,
-          notes: [
-            ...l.notes,
-            { 
-              id: Math.random().toString(), 
-              author: "Platform System", 
-              text: isSelfunclaim ? "Lead claim cancelled by administrator" : `Lead reassigned by administrator to ${agentEmail}`, 
-              date: new Date().toISOString().slice(0, 10) 
-            }
-          ]
-        };
-      }
-      return l;
-    }));
+  const reassignLead = async (id: string, agentEmail: string) => {
+    const isSelfunclaim = !agentEmail;
+    try {
+      await apiFetch(`/api/leads/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          status: isSelfunclaim ? "Available" : "Claimed", 
+          claimedBy: isSelfunclaim ? null : agentEmail,
+          newNote: {
+            author: "Platform System",
+            text: isSelfunclaim ? "Lead claim cancelled by administrator" : `Lead reassigned by administrator to ${agentEmail}`,
+            date: new Date().toISOString().slice(0, 10)
+          }
+        })
+      });
+      await loadLeads();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const addLeadNote = (leadId: string, text: string, author: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === leadId) {
-        return {
-          ...l,
-          notes: [
-            ...l.notes,
-            { id: Math.random().toString(), author, text, date: new Date().toISOString().slice(0, 10) }
-          ]
-        };
-      }
-      return l;
-    }));
+  const addLeadNote = async (leadId: string, text: string, author: string) => {
+    try {
+      await apiFetch(`/api/leads/${leadId}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          newNote: {
+            author,
+            text,
+            date: new Date().toISOString().slice(0, 10)
+          }
+        })
+      });
+      await loadLeads();
+    } catch(e) {
+      console.error(e);
+    }
   };
 
-  const addLeadCustomField = (leadId: string, title: string, value: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === leadId) {
-        return {
-          ...l,
-          customFields: [
-            ...l.customFields,
-            { id: Math.random().toString(), title, value }
-          ]
-        };
-      }
-      return l;
-    }));
+  const addLeadCustomField = async (leadId: string, title: string, value: string) => {
+    try {
+      await apiFetch(`/api/leads/${leadId}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          newCustomField: { id: Math.random().toString(), title, value }
+        })
+      });
+      await loadLeads();
+    } catch(e) {
+      console.error(e);
+    }
   };
 
-  const uploadLeadFile = (leadId: string, fileName: string, fileUrl: string, uploadedBy: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === leadId) {
-        const newUpload: LeadUpload = {
-          id: "upl-" + Math.floor(1000 + Math.random() * 9000),
-          name: fileName,
-          url: fileUrl,
-          date: new Date().toISOString().slice(0, 10),
-          uploadedBy
-        };
-        return {
-          ...l,
-          uploads: [...l.uploads, newUpload],
-          notes: [
-            ...l.notes,
-            { 
-              id: Math.random().toString(), 
-              author: uploadedBy, 
-              text: `Uploaded File Deliverable: ${fileName}`, 
-              date: new Date().toISOString().slice(0, 10) 
-            }
-          ]
-        };
-      }
-      return l;
-    }));
+  const uploadLeadFile = async (leadId: string, fileName: string, fileUrl: string, uploadedBy: string) => {
+    try {
+      await apiFetch(`/api/leads/${leadId}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
+          newUpload: {
+             id: "upl-" + Math.random().toString(),
+             name: fileName,
+             url: fileUrl,
+             date: new Date().toISOString().slice(0, 10),
+             uploadedBy
+          },
+          newNote: {
+            author: uploadedBy,
+            text: `Uploaded File Deliverable: ${fileName}`,
+            date: new Date().toISOString().slice(0, 10)
+          }
+        })
+      });
+      await loadLeads();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const issueCommissionPayment = (leadId: string, proofName: string, proofUrl: string) => {
-    setLeads(prev => prev.map(l => {
-      if (l.id === leadId) {
-        return {
-          ...l,
+  const issueCommissionPayment = async (leadId: string, proofName: string, proofUrl: string) => {
+    try {
+      await apiFetch(`/api/leads/${leadId}`, {
+        method: "PUT",
+        body: JSON.stringify({ 
           commissionPaid: true,
           commissionPaidDate: new Date().toISOString().slice(0, 10),
           commissionProofName: proofName,
           commissionProofUrl: proofUrl,
-          status: "Sold" as const,
-          notes: [
-            ...l.notes,
-            { id: Math.random().toString(), author: "Platform System", text: `Commission Paid successfully. Proof of Payment uploaded: ${proofName}`, date: new Date().toISOString().slice(0, 10) }
-          ]
-        };
-      }
-      return l;
-    }));
-    setNotifications(prev => [
-      { id: Math.random().toString(), message: `Commission paid out for lead ${leadId}` },
-      ...prev
-    ]);
+          status: "Sold",
+          newNote: {
+            author: "Platform System",
+            text: `Commission Paid successfully. Proof of Payment uploaded: ${proofName}`,
+            date: new Date().toISOString().slice(0, 10)
+          }
+        })
+      });
+      await loadLeads();
+      setNotifications(prev => [
+        { id: Math.random().toString(), message: `Commission paid out for lead ${leadId}` },
+        ...prev
+      ]);
+    } catch(e) {
+      console.error(e);
+    }
   };
 
   const removeNotification = (id: string) => {
@@ -339,7 +337,8 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   return (
     <JobsContext.Provider value={{ 
       leads, 
-      notifications, 
+      notifications,
+      loadLeads, 
       addLead, 
       updateLead, 
       claimLead, 

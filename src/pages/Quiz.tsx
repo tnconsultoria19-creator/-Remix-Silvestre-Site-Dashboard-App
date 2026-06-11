@@ -28,15 +28,6 @@ export function Quiz() {
           <p className="text-[15px] text-on-surface-variant mb-8 leading-relaxed">
             Your application and assessment scores are currently under editorial review by the administration team. Please wait for approval.
           </p>
-          <button 
-             onClick={() => {
-              approveUser();
-              navigate("/dashboard");
-             }}
-             className="saas-button saas-button-secondary text-[12px] opacity-50 hover:opacity-100"
-          >
-             [MOCK] Auto-approve me
-          </button>
         </div>
       </div>
     );

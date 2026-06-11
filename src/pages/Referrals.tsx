@@ -54,35 +54,7 @@ export function Referrals() {
     }
   }, [user]);
 
-  const getDefaultReferrals = (): ReferralAgent[] => [
-    {
-      id: "ref-101",
-      name: "Douglas Silva",
-      email: "d.silva@example.com",
-      joinedDate: "2 months ago",
-      salesCompleted: 8,
-      maxSales: 10,
-      status: "Active"
-    },
-    {
-      id: "ref-102",
-      name: "Reny Chen",
-      email: "r.chen@example.com",
-      joinedDate: "1 month ago",
-      salesCompleted: 3,
-      maxSales: 10,
-      status: "Active"
-    },
-    {
-      id: "ref-103",
-      name: "Markus Johnson",
-      email: "m.johnson@example.com",
-      joinedDate: "3 months ago",
-      salesCompleted: 10,
-      maxSales: 10,
-      status: "Expired"
-    }
-  ];
+  const getDefaultReferrals = (): ReferralAgent[] => [];
 
   const updateReferralsState = (updated: ReferralAgent[]) => {
     setReferredAgents(updated);

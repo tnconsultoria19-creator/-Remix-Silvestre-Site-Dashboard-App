@@ -75,14 +75,25 @@ export function TaskDetail() {
     }
   };
 
-  const processAndUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      // Create a persistent string representation (base64 dataurl or generic)
-      const fileUrl = e.target?.result as string || "https://example.com/mock-fallback.pdf";
-      uploadLeadFile(lead.id, file.name, fileUrl, user?.name || user?.email || "Agent");
-    };
-    reader.readAsDataURL(file);
+  const processAndUpload = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      const { apiFetch } = await import("../lib/api");
+      const res = await apiFetch("/api/upload", {
+        method: "POST",
+        body: formData
+      });
+      
+      if (res.success && res.url) {
+        await uploadLeadFile(lead.id, file.name, res.url, user?.name || user?.email || "Agent");
+      } else {
+        alert("Upload failed: " + (res.error || "Unknown error"));
+      }
+    } catch (err: any) {
+      alert("Error uploading file: " + err.message);
+    }
   };
 
   const handleNativeFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

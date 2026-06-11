@@ -3,10 +3,21 @@
  * Powered by Cloudflare D1 (SQL Database Engine)
  */
 
+type D1Database = any;
+type ExecutionContext = any;
+
 export interface Env {
   // Bind your D1 Database in wrangler.toml to DB
   DB: D1Database;
+  
+  // KV Namespace binding for caching
+  CACHE_KV: any; // KVNamespace
+  
+  // R2 Bucket binding for file uploads
+  STORAGE_BUCKET: any; // R2Bucket
+  
   JWT_SECRET?: string;
+  APP_URL?: string;
 }
 
 export default {
@@ -32,6 +43,22 @@ export default {
 
     try {
       // 2. Routing Logic
+
+      // GET /cdn/:fileId
+      if (path.startsWith("/cdn/") && method === "GET") {
+         const fileId = path.split("/cdn/").pop();
+         if (!fileId || !env.STORAGE_BUCKET) return new Response("Not found", { status: 404 });
+         
+         const object = await env.STORAGE_BUCKET.get(fileId);
+         if (!object) return new Response("Not found", { status: 404 });
+         
+         const headers = new Headers();
+         object.writeHttpMetadata(headers);
+         headers.set("etag", object.httpEtag);
+         headers.set("Cache-Control", "public, max-age=31536000"); // Cache for 1 year
+         
+         return new Response(object.body, { headers });
+      }
 
       // --- AUTHENTICATION ENDPOINTS ---
 
@@ -126,7 +153,36 @@ export default {
         return jsonResponse({ success: true, user: userPayload }, 201, corsHeaders);
       }
 
-      // --- AGENTS ENDPOINTS ---
+      // GET /api/auth/me
+      if (path === "/api/auth/me" && method === "GET") {
+        const authHeader = request.headers.get("Authorization");
+        if (!authHeader || !authHeader.startsWith("Bearer session_")) {
+          return jsonResponse({ error: "Unauthorized" }, 401, corsHeaders);
+        }
+        
+        try {
+          const email = atob(authHeader.replace("Bearer session_", ""));
+          const agent = await env.DB.prepare("SELECT * FROM agents WHERE email = ?").bind(email).first() as any;
+          if (!agent) {
+             return jsonResponse({ error: "Agent not found" }, 404, corsHeaders);
+          }
+          if (agent.is_frozen === 1) {
+             return jsonResponse({ error: "Account frozen" }, 403, corsHeaders);
+          }
+          const userPayload = {
+            email: agent.email,
+            name: agent.name,
+            isApproved: agent.is_approved === 1,
+            didPassQuiz: agent.did_pass_quiz === 1,
+            isAdmin: agent.is_admin === 1,
+            isSuperAdmin: agent.is_super_admin === 1,
+            avatarUrl: agent.avatar_url
+          };
+          return jsonResponse(userPayload, 200, corsHeaders);
+        } catch (e) {
+           return jsonResponse({ error: "Invalid token" }, 401, corsHeaders);
+        }
+      }
 
       // GET /api/agents (Admin only)
       if (path === "/api/agents" && method === "GET") {
@@ -178,6 +234,58 @@ export default {
         ).bind(...params).run();
 
         return jsonResponse({ success: true }, 200, corsHeaders);
+      }
+
+      // DELETE /api/agents/:email
+      if (path.startsWith("/api/agents/") && method === "DELETE") {
+        const targetEmail = decodeURIComponent(path.split("/").pop() || "").trim().toLowerCase();
+        
+        await env.DB.prepare("DELETE FROM agents WHERE email = ?").bind(targetEmail).run();
+        return jsonResponse({ success: true }, 200, corsHeaders);
+      }
+      
+      // --- CLOUDFLARE KV ENDPOINTS (Generic JSON storage) ---
+      // GET /api/kv/:key
+      if (path.startsWith("/api/kv/") && method === "GET") {
+        const key = path.split("/api/kv/").pop();
+        if (!key || !env.CACHE_KV) return jsonResponse({ error: "Not found" }, 404, corsHeaders);
+        const data = await env.CACHE_KV.get(key, "json");
+        return jsonResponse({ data: data || null }, 200, corsHeaders);
+      }
+      
+      // PUT /api/kv/:key
+      if (path.startsWith("/api/kv/") && method === "PUT") {
+        const key = path.split("/api/kv/").pop();
+        if (!key || !env.CACHE_KV) return jsonResponse({ error: "Not found" }, 404, corsHeaders);
+        const body = await request.json();
+        await env.CACHE_KV.put(key, JSON.stringify(body));
+        return jsonResponse({ success: true }, 200, corsHeaders);
+      }
+
+      // --- CLOUDFLARE R2 UPLOAD ENDPOINT ---
+      if (path === "/api/upload" && method === "POST") {
+        try {
+          const formData = await request.formData();
+          const file = formData.get("file") as File;
+          if (!file) {
+            return jsonResponse({ error: "No file uploaded" }, 400, corsHeaders);
+          }
+
+          const fileId = `${Date.now()}-${file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase()}`;
+          
+          if (env.STORAGE_BUCKET) {
+            await env.STORAGE_BUCKET.put(fileId, file.stream(), {
+              httpMetadata: { contentType: file.type }
+            });
+            // Public R2 Bucket URL mapping (assumes custom domain or r2.dev enabled)
+            const fileUrl = `${env.APP_URL || ''}/cdn/${fileId}`;
+            return jsonResponse({ success: true, url: fileUrl }, 200, corsHeaders);
+          } else {
+             return jsonResponse({ error: "Storage bucket not configured" }, 500, corsHeaders);
+          }
+        } catch (e: any) {
+           return jsonResponse({ error: e.message || "Upload failed" }, 500, corsHeaders);
+        }
       }
 
       // --- LEADS / OPPORTUNITIES ENDPOINTS ---

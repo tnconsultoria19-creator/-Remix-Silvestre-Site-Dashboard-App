@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { apiFetch, setAuthToken, clearAuthToken, getAuthToken } from "../lib/api";
 
 export interface Agent {
   email: string;
   name: string;
-  password?: string;
-  whatsapp: string;
-  country: string;
-  languages: string;
-  experience: string;
+  whatsapp?: string;
+  country?: string;
+  languages?: string;
+  experience?: string;
   isApproved: boolean;
   didPassQuiz: boolean;
   isAdmin: boolean;
@@ -32,76 +32,62 @@ interface AuthContextType {
   user: User | null;
   agents: Agent[];
   impersonatingFrom: User | null;
-  login: (email: string, password?: string) => { success: boolean; error?: string };
-  register: (email: string, password?: string, name?: string, bypassTraining?: boolean, whatsapp?: string, country?: string, languages?: string, experience?: string) => void;
+  loadAgents: () => Promise<void>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  register: (email: string, password?: string, name?: string, bypassTraining?: boolean, whatsapp?: string, country?: string, languages?: string, experience?: string) => Promise<void>;
   logout: () => void;
-  passQuiz: () => void;
-  approveUser: () => void;
-  updateAvatar: (url: string) => void;
+  passQuiz: () => Promise<void>;
+  approveUser: () => Promise<void>;
+  updateAvatar: (url: string) => Promise<void>;
   
   // Admin functions
-  updateAgentProfile: (email: string, data: Partial<Agent>) => void;
-  freezeAgentAccount: (email: string, freeze: boolean) => void;
-  deleteAgentAccount: (email: string) => void;
-  toggleAdminRights: (email: string, enableAdmin: boolean) => void;
+  updateAgentProfile: (email: string, data: Partial<Agent>) => Promise<void>;
+  freezeAgentAccount: (email: string, freeze: boolean) => Promise<void>;
+  deleteAgentAccount: (email: string) => Promise<void>;
+  toggleAdminRights: (email: string, enableAdmin: boolean) => Promise<void>;
   impersonateAgent: (email: string) => void;
   stopImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const defaultAgents: Agent[] = [
-  {
-    email: "olisbel@gmail.com",
-    password: "19921108626",
-    name: "Olisbel (Super Admin)",
-    whatsapp: "+1000000000",
-    country: "United Kingdom",
-    languages: "EN, PT",
-    experience: "10",
-    isApproved: true,
-    didPassQuiz: true,
-    isAdmin: true,
-    isSuperAdmin: true,
-    uploads: []
-  }
-];
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const savedCurrent = localStorage.getItem("platform_current_user");
-    return savedCurrent ? JSON.parse(savedCurrent) : null;
-  });
-
-  const [agents, setAgents] = useState<Agent[]>(() => {
-    const savedAgents = localStorage.getItem("platform_agents");
-    if (savedAgents) {
-      try {
-        return JSON.parse(savedAgents);
-      } catch (e) {
-        return defaultAgents;
-      }
-    }
-    localStorage.setItem("platform_agents", JSON.stringify(defaultAgents));
-    return defaultAgents;
-  });
-
+  const [user, setUser] = useState<User | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [impersonatingFrom, setImpersonatingFrom] = useState<User | null>(() => {
     const savedImpersonating = localStorage.getItem("platform_impersonating_from");
     return savedImpersonating ? JSON.parse(savedImpersonating) : null;
   });
 
   useEffect(() => {
-    localStorage.setItem("platform_agents", JSON.stringify(agents));
-  }, [agents]);
+    // Attempt to load session if token exists
+    const token = getAuthToken();
+    if (token) {
+      apiFetch("/api/auth/me").then(userData => {
+        setUser(userData);
+      }).catch(() => {
+        clearAuthToken();
+        setUser(null);
+      });
+    }
+  }, []);
+
+  const loadAgents = async () => {
+    if (user?.isAdmin) {
+      try {
+        const data = await apiFetch("/api/agents");
+        setAgents(data);
+      } catch (e) {
+        console.error("Failed to load agents", e);
+      }
+    }
+  };
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem("platform_current_user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("platform_current_user");
+    if (user?.isAdmin && !impersonatingFrom) {
+      loadAgents();
     }
-  }, [user]);
+  }, [user, impersonatingFrom]);
 
   useEffect(() => {
     if (impersonatingFrom) {
@@ -111,46 +97,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [impersonatingFrom]);
 
-  const login = (email: string, password?: string) => {
-    // Standardize input
-    const cleanEmail = email.trim().toLowerCase();
-
-    // Special check for default superadmin Quick Login bypass
-    if (cleanEmail === 'olisbel@gmail.com' && (!password || password === '19921108626')) {
-      const u = { email: 'olisbel@gmail.com', name: "Olisbel (Super Admin)", isApproved: true, didPassQuiz: true, isAdmin: true, isSuperAdmin: true };
-      setUser(u);
+  const login = async (email: string, password?: string) => {
+    try {
+      const response = await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+      setUser(response.user);
+      setAuthToken(response.user.token);
       return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || "Login failed" };
     }
-
-    // Find agent credentials
-    const agent = agents.find(a => a.email.toLowerCase() === cleanEmail);
-    if (!agent) {
-      return { success: false, error: "Incorrect email or password" };
-    }
-
-    if (password && agent.password !== password) {
-      return { success: false, error: "Incorrect email or password" };
-    }
-
-    if (agent.isFrozen) {
-      return { success: false, error: "Your account is frozen. Please contact Super Admin." };
-    }
-
-    const u = {
-      email: agent.email,
-      name: agent.name,
-      isApproved: agent.isApproved,
-      didPassQuiz: agent.didPassQuiz,
-      isAdmin: agent.isAdmin,
-      isSuperAdmin: agent.isSuperAdmin,
-      avatarUrl: agent.avatarUrl
-    };
-    
-    setUser(u);
-    return { success: true };
   };
 
-  const register = (
+  const register = async (
     email: string, 
     password?: string, 
     name?: string, 
@@ -160,145 +121,131 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     languages?: string,
     experience?: string
   ) => {
-    const cleanEmail = email.trim().toLowerCase();
-    
-    // Check if copy already exists
-    if (agents.some(a => a.email.toLowerCase() === cleanEmail)) {
-      return;
+    try {
+      const response = await apiFetch("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          email, password, name, bypassTraining, whatsapp, country, languages, experience
+        })
+      });
+      setUser(response.user);
+      setAuthToken(response.user.token);
+    } catch (e: any) {
+      throw new Error(e.message || "Registration failed");
     }
-
-    const isAdm = cleanEmail === 'olisbel@gmail.com' || cleanEmail.includes('admin');
-    const isSuper = cleanEmail === 'olisbel@gmail.com';
-
-    const newAgent: Agent = {
-      email: cleanEmail,
-      password: password || "password123",
-      name: name || cleanEmail.split('@')[0],
-      whatsapp: whatsapp || "+0000000000",
-      country: country || "Unknown",
-      languages: languages || "EN",
-      experience: experience || "0",
-      isApproved: isAdm || !!bypassTraining,
-      didPassQuiz: isAdm || !!bypassTraining,
-      isAdmin: isAdm,
-      isSuperAdmin: isSuper,
-      uploads: []
-    };
-
-    setAgents(prev => [...prev, newAgent]);
-
-    const u = {
-      email: newAgent.email,
-      name: newAgent.name,
-      isApproved: newAgent.isApproved,
-      didPassQuiz: newAgent.didPassQuiz,
-      isAdmin: newAgent.isAdmin,
-      isSuperAdmin: newAgent.isSuperAdmin
-    };
-
-    setUser(u);
   };
 
   const logout = () => {
     setUser(null);
     setImpersonatingFrom(null);
-    localStorage.removeItem("platform_current_user");
+    clearAuthToken();
     localStorage.removeItem("platform_impersonating_from");
   };
 
-  const passQuiz = () => {
+  const passQuiz = async () => {
     if (user) {
-      const updatedUser = { ...user, didPassQuiz: true };
-      setUser(updatedUser);
-      setAgents(prev => prev.map(a => a.email.toLowerCase() === user.email.toLowerCase() ? { ...a, didPassQuiz: true } : a));
+      try {
+        await apiFetch(`/api/agents/${encodeURIComponent(user.email)}`, {
+          method: "PUT",
+          body: JSON.stringify({ didPassQuiz: true })
+        });
+        setUser({ ...user, didPassQuiz: true });
+        await loadAgents();
+      } catch (e) {
+         console.error("Failed to update quiz status");
+      }
     }
   };
 
-  const approveUser = () => {
+  const approveUser = async () => {
     if (user) {
-      const updatedUser = { ...user, isApproved: true };
-      setUser(updatedUser);
-      setAgents(prev => prev.map(a => a.email.toLowerCase() === user.email.toLowerCase() ? { ...a, isApproved: true } : a));
+      try {
+        await apiFetch(`/api/agents/${encodeURIComponent(user.email)}`, {
+          method: "PUT",
+          body: JSON.stringify({ isApproved: true })
+        });
+        setUser({ ...user, isApproved: true });
+        await loadAgents();
+      } catch (e) {
+         console.error("Failed to approve user");
+      }
     }
   };
 
-  const updateAvatar = (url: string) => {
+  const updateAvatar = async (url: string) => {
     if (user) {
-      setUser({ ...user, avatarUrl: url });
-      setAgents(prev => prev.map(a => a.email.toLowerCase() === user.email.toLowerCase() ? { ...a, avatarUrl: url } : a));
+      try {
+        await apiFetch(`/api/agents/${encodeURIComponent(user.email)}`, {
+          method: "PUT",
+          body: JSON.stringify({ avatarUrl: url })
+        });
+        setUser({ ...user, avatarUrl: url });
+        await loadAgents();
+      } catch (e) {
+         console.error("Failed to update avatar");
+      }
     }
   };
 
   // Admin capabilities
-  const updateAgentProfile = (email: string, data: Partial<Agent>) => {
-    setAgents(prev => prev.map(a => {
-      if (a.email.toLowerCase() === email.toLowerCase()) {
-        // Prevent editing superadmin credentials in key fields unless authorized
-        if (a.isSuperAdmin && data.password && email !== user?.email) {
-          return a; // reject
-        }
-        return { ...a, ...data };
+  const updateAgentProfile = async (email: string, data: Partial<Agent>) => {
+    try {
+      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
+        method: "PUT",
+        body: JSON.stringify(data)
+      });
+      await loadAgents();
+      if (user && user.email.toLowerCase() === email.toLowerCase()) {
+        const res = await apiFetch("/api/auth/me");
+        setUser(res);
       }
-      return a;
-    }));
-
-    // If edited agent is currently logged in, update logged-in user state too
-    if (user && user.email.toLowerCase() === email.toLowerCase()) {
-      setUser(prev => prev ? {
-        ...prev,
-        name: data.name ?? prev.name,
-        isApproved: data.isApproved ?? prev.isApproved,
-        didPassQuiz: data.didPassQuiz ?? prev.didPassQuiz,
-        isAdmin: data.isAdmin ?? prev.isAdmin,
-        avatarUrl: data.avatarUrl ?? prev.avatarUrl
-      } : null);
+    } catch (e) {
+      console.error("Failed to update agent profile");
     }
   };
 
-  const freezeAgentAccount = (email: string, freeze: boolean) => {
-    // Protect superadmin from being frozen
-    const target = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
-    if (target?.isSuperAdmin) return;
-
-    setAgents(prev => prev.map(a => {
-      if (a.email.toLowerCase() === email.toLowerCase()) {
-        return { ...a, isFrozen: freeze };
+  const freezeAgentAccount = async (email: string, freeze: boolean) => {
+    try {
+      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
+        method: "PUT",
+        body: JSON.stringify({ isFrozen: freeze })
+      });
+      await loadAgents();
+      if (freeze && user && user.email.toLowerCase() === email.toLowerCase()) {
+        logout();
       }
-      return a;
-    }));
-
-    // If current user is frozen, force logout
-    if (freeze && user && user.email.toLowerCase() === email.toLowerCase()) {
-      logout();
+    } catch (e) {
+      console.error("Failed to freeze account");
     }
   };
 
-  const deleteAgentAccount = (email: string) => {
-    const target = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
-    if (target?.isSuperAdmin) return;
-
-    setAgents(prev => prev.filter(a => a.email.toLowerCase() !== email.toLowerCase()));
-
-    // Force logout if deleting self
-    if (user && user.email.toLowerCase() === email.toLowerCase()) {
-      logout();
+  const deleteAgentAccount = async (email: string) => {
+    try {
+      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
+        method: "DELETE"
+      });
+      await loadAgents();
+      if (user && user.email.toLowerCase() === email.toLowerCase()) {
+        logout();
+      }
+    } catch (e) {
+       console.error("Failed to delete account");
     }
   };
 
-  const toggleAdminRights = (email: string, enableAdmin: boolean) => {
-    const target = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
-    if (target?.isSuperAdmin) return; // Superadmin is always admin
-
-    setAgents(prev => prev.map(a => {
-      if (a.email.toLowerCase() === email.toLowerCase()) {
-        return { ...a, isAdmin: enableAdmin };
+  const toggleAdminRights = async (email: string, enableAdmin: boolean) => {
+    try {
+      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
+        method: "PUT",
+        body: JSON.stringify({ isAdmin: enableAdmin })
+      });
+      await loadAgents();
+      if (user && user.email.toLowerCase() === email.toLowerCase()) {
+        const res = await apiFetch("/api/auth/me");
+        setUser(res);
       }
-      return a;
-    }));
-
-    // Update session user if self
-    if (user && user.email.toLowerCase() === email.toLowerCase()) {
-      setUser(prev => prev ? { ...prev, isAdmin: enableAdmin } : null);
+    } catch (e) {
+       console.error("Failed to toggle admin rights");
     }
   };
 
@@ -306,7 +253,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const target = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
     if (!target) return;
 
-    // Save previous admin user
     if (!impersonatingFrom && user) {
       setImpersonatingFrom(user);
     }
@@ -337,6 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user, 
       agents, 
       impersonatingFrom,
+      loadAgents,
       login, 
       register, 
       logout, 
