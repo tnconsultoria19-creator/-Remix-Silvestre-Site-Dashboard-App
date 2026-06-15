@@ -17,6 +17,7 @@ export default defineConfig(async () => {
   }
 
   return {
+    base: "/-Remix-Silvestre-Site-Dashboard-App/",
     plugins: [
       react(), 
       tailwindcss(),
