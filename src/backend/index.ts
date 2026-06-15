@@ -11,6 +11,16 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.use('*', cors());
 
+// ✅ ADD THIS HERE
+app.get('/', (c) => {
+  return c.json({
+    status: 'ok',
+    service: 'CRM API is running',
+    version: '1.0',
+    endpoints: '/api/*'
+  });
+});
+
 // --- Simple JWT Implementation ---
 async function generateJWT(payload: any, secret: string) {
   const encoder = new TextEncoder();
