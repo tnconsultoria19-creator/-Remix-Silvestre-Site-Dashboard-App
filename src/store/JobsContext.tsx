@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useI18n } from "./I18nContext";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getAuthToken } from "../lib/api";
 
 export interface ContactPerson {
   name: string;
@@ -106,6 +106,10 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [globalCurrency, setGlobalCurrency] = useState<"USD" | "EUR" | "BRL" | "MZN" | "ZAR">(("USD"));
 
   const loadLeads = async () => {
+    if (!getAuthToken()) {
+      setLeads([]);
+      return;
+    }
     try {
       const data = await apiFetch("/api/leads");
       setLeads(data);

@@ -3,12 +3,11 @@ import { cors } from 'hono/cors';
 
 export type Bindings = {
   DB: D1Database;
-  STORAGE: R2Bucket;
-  CACHE: KVNamespace;
+  FILES: R2Bucket;
   JWT_SECRET: string;
 };
 
-const app = new Hono<{ Bindings: Bindings }>()
+const app = new Hono<{ Bindings: Bindings }>();
 
 app.use('*', cors());
 
@@ -69,7 +68,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
   if (!file) return c.json({ error: 'No file' }, 400);
 
   const key = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-  await c.env.STORAGE.put(key, await file.arrayBuffer(), {
+  await c.env.FILES.put(key, await file.arrayBuffer(), {
     httpMetadata: { contentType: file.type }
   });
   
@@ -79,7 +78,7 @@ app.post('/api/upload', authMiddleware, async (c) => {
 
 app.get('/cdn/:key', async (c) => {
   const key = c.req.param('key');
-  const object = await c.env.STORAGE.get(key);
+  const object = await c.env.FILES.get(key);
   if (!object) return c.text('Not found', 404);
   
   const headers = new Headers();
@@ -106,36 +105,109 @@ app.post('/api/tickets', authMiddleware, async (c) => {
 // --- LEADS API ---
 app.get('/api/leads', authMiddleware, async (c) => {
   const { results } = await c.env.DB.prepare('SELECT * FROM leads ORDER BY created_at DESC').all();
-  return c.json(results);
+  // Decode JSON fields since SQLite doesn't have native JSON arrays/objects
+  const parsed = results.map(r => ({
+    ...r,
+    contactPerson: r.contactPerson ? JSON.parse(r.contactPerson as string) : null,
+    socials: r.socials ? JSON.parse(r.socials as string) : null,
+    notes: r.notes ? JSON.parse(r.notes as string) : [],
+    customFields: r.customFields ? JSON.parse(r.customFields as string) : [],
+    uploads: r.uploads ? JSON.parse(r.uploads as string) : []
+  }));
+  return c.json(parsed);
 });
 
-// --- KV REPORTS ---
-app.get('/api/reports/summary', authMiddleware, async (c) => {
-  // Use KV for caching reports
-  const cached = await c.env.CACHE.get('report_summary', 'json');
-  if (cached) return c.json(cached);
+app.post('/api/leads', authMiddleware, async (c) => {
+  const payload = await c.req.json();
+  const id = `lead_${Date.now()}`;
+  await c.env.DB.prepare(`
+    INSERT INTO leads (id, title, value, currency, status, assigned_to, contactPerson, socials, notes, customFields, uploads)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id, payload.name || 'New Lead', payload.estValue || 0, payload.earningsCurrency || 'USD',
+    payload.status || 'Available', payload.claimedBy || null,
+    JSON.stringify(payload.contactPerson || {}),
+    JSON.stringify(payload.socials || {}),
+    JSON.stringify(payload.notes || []),
+    JSON.stringify(payload.customFields || []),
+    JSON.stringify(payload.uploads || [])
+  ).run();
+  return c.json({ id, success: true });
+});
 
+app.put('/api/leads/:id', authMiddleware, async (c) => {
+  const id = c.req.param('id');
+  const payload = await c.req.json();
+  
+  // Update logic handles merging or complete replacement depending on fields provided.
+  // We'll simplisticly just update fields if present in a real app, but for this mock-turned-real,
+  // let's grab the current, merge, then set.
+  const current = await c.env.DB.prepare('SELECT * FROM leads WHERE id = ?').bind(id).first();
+  if (!current) return c.json({ error: 'Not found' }, 404);
+  
+  let notes = current.notes ? JSON.parse(current.notes as string) : [];
+  if (payload.newNote) notes.push(payload.newNote);
+  
+  let uploads = current.uploads ? JSON.parse(current.uploads as string) : [];
+  if (payload.newUpload) uploads.push(payload.newUpload);
+  
+  let customFields = current.customFields ? JSON.parse(current.customFields as string) : [];
+  if (payload.newCustomField) customFields.push(payload.newCustomField);
+
+  // Dynamic set builder
+  const updates: string[] = [];
+  const args: any[] = [];
+  
+  if (payload.status !== undefined) { updates.push('status = ?'); args.push(payload.status); }
+  if (payload.claimedBy !== undefined) { updates.push('assigned_to = ?'); args.push(payload.claimedBy); }
+  if (payload.commissionPaid !== undefined) { updates.push('commission paid = ?'); /* simplified */ }
+  // Update JSON arrays
+  if (payload.newNote) { updates.push('notes = ?'); args.push(JSON.stringify(notes)); }
+  if (payload.newUpload) { updates.push('uploads = ?'); args.push(JSON.stringify(uploads)); }
+  if (payload.newCustomField) { updates.push('customFields = ?'); args.push(JSON.stringify(customFields)); }
+
+  if (updates.length > 0) {
+    args.push(id);
+    await c.env.DB.prepare(`UPDATE leads SET ${updates.join(', ')} WHERE id = ?`).bind(...args).run();
+  }
+  
+  return c.json({ success: true });
+});
+
+app.delete('/api/leads/:id', authMiddleware, async (c) => {
+  const id = c.req.param('id');
+  await c.env.DB.prepare('DELETE FROM leads WHERE id = ?').bind(id).run();
+  return c.json({ success: true });
+});
+
+// --- REPORTS ---
+app.get('/api/reports/summary', authMiddleware, async (c) => {
   const tickets = await c.env.DB.prepare('SELECT COUNT(*) as count FROM tickets').first();
   const leads = await c.env.DB.prepare('SELECT COUNT(*) as count FROM leads').first();
   
   const report = { tickets: tickets?.count || 0, leads: leads?.count || 0, timestamp: Date.now() };
-  await c.env.CACHE.put('report_summary', JSON.stringify(report), { expirationTtl: 60 });
   return c.json(report);
 });
 
-export default app;
-app.get('/', (c) => {
-  return c.json({
-    status: 'ok',
-    service: 'CRM API',
-    message: 'Backend is running',
-    endpoints: [
-      '/api/auth/login',
-      '/api/auth/me',
-      '/api/tickets',
-      '/api/leads',
-      '/api/upload',
-      '/api/reports/summary'
-    ]
-  });
+// --- EMULATED KV API ---
+app.get('/api/kv/:key', authMiddleware, async (c) => {
+  const key = c.req.param('key');
+  const record = await c.env.DB.prepare('SELECT value FROM kv_store WHERE key = ?').bind(key).first();
+  if (!record) return c.json({ data: null });
+  try {
+    return c.json({ data: JSON.parse(record.value as string) });
+  } catch (e) {
+    return c.json({ data: record.value });
+  }
 });
+
+app.put('/api/kv/:key', authMiddleware, async (c) => {
+  const key = c.req.param('key');
+  const body = await c.req.text();
+  await c.env.DB.prepare('INSERT INTO kv_store (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?')
+    .bind(key, body, body)
+    .run();
+  return c.json({ success: true });
+});
+
+export default app;

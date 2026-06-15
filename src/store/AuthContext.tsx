@@ -60,8 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Attempt to load session if token exists
     const token = getAuthToken();
     if (token) {
-      apiFetch("/api/auth/me").then(userData => {
-        setUser(userData);
+      apiFetch("/api/auth/me").then(res => {
+        setUser(res.user);
       }).catch(() => {
         clearAuthToken();
         setUser(null);
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password })
       });
       setUser(response.user);
-      setAuthToken(response.user.token);
+      setAuthToken(response.token);
       return { success: true, user: response.user };
     } catch (e: any) {
       return { success: false, error: e.message || "Login failed" };

@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS leads (
   status TEXT DEFAULT 'New', -- 'New', 'Contacted', 'Qualified', 'Won', 'Lost'
   assigned_to TEXT,
   customer_id TEXT,
+  contactPerson TEXT,
+  socials TEXT,
+  notes TEXT,
+  customFields TEXT,
+  uploads TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (assigned_to) REFERENCES users(id),
   FOREIGN KEY (customer_id) REFERENCES customers(id)
@@ -84,6 +89,12 @@ CREATE TABLE IF NOT EXISTS notifications (
   is_read BOOLEAN DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- KV STORE emulation
+CREATE TABLE IF NOT EXISTS kv_store (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 
 -- Initial Superadmin Seed

@@ -1,6 +1,6 @@
 // API utility to handle Cloudflare Worker requests
 
-export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "https://lead-marketplace-api.your-username.workers.dev";
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "";
 
 export function getAuthToken() {
   const name = "token=";

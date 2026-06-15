@@ -1,21 +1,27 @@
 {
-  "name": "crm-ticket-platform",
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "remixsilvestresitedashboardapp",
   "main": "src/backend/index.ts",
-  "compatibility_date": "2024-04-01",
+  "compatibility_date": "2026-06-11",
   "compatibility_flags": ["nodejs_compat"],
-
+  "observability": {
+    "enabled": true
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "crm_db",
-      "database_id": "dbe78523-f6db-44df-8322-8f8e378ad577"
+      "database_id": "dbe78523-f6db-44df-8322-8f8e378ad577",
+      "migrations_dir": "migrations"
     }
   ],
-
   "r2_buckets": [
     {
       "binding": "FILES",
       "bucket_name": "crm-assets"
     }
-  ]
+  ],
+  "vars": {
+    "JWT_SECRET": "replace-with-a-very-secure-jwt-secret-in-production"
+  }
 }
