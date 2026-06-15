@@ -1,6 +1,6 @@
 // API utility to handle Cloudflare Worker requests
 
-export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "";
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "https://remixsilvestresitedashboardapp.tnconsultoria19.workers.dev";
 
 export function getAuthToken() {
   const name = "token=";
