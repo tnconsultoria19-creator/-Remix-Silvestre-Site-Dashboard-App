@@ -12,7 +12,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use('*', cors());
 
 // ✅ ADD THIS HERE
-app.get('/', (c) => {
+app.get('/api', (c) => {
   return c.json({
     status: 'ok',
     service: 'CRM API is running',

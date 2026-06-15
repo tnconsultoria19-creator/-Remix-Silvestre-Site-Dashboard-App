@@ -17,14 +17,17 @@ export default defineConfig(async () => {
   }
 
   return {
-    base: "./",
+    base: process.env.NODE_ENV === "production" ? "/-Remix-Silvestre-Site-Dashboard-App/" : "/",
     plugins: [
       react(), 
       tailwindcss(),
       devServer({
         entry: 'src/backend/index.ts',
         injectClientScript: false,
-        env: bindings
+        env: bindings,
+        exclude: [
+          /^(?!\/api\/|\/cdn\/).*/
+        ]
       })
     ],
     resolve: {
