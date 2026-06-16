@@ -11,21 +11,14 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// FALLBACK INDEX HTML SERVER
-// This guarantees that the login page loads perfectly even if asset mapping lags
-const fallbackHtml = `<!DOCTYPE html><html lang="en" class="h-full bg-slate-950 text-slate-100"><head><meta charset="UTF-8"><title>Silvestre Solutions - SaaS Ticketing Dashboard</title><script src="https://cdn.tailwindcss.com"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"></head><body class="h-full flex items-center justify-center bg-slate-950 text-slate-300"><div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-sm"><h2 class="text-2xl font-bold text-white mb-4">Initializing Portal</h2><p class="text-sm text-slate-400 mb-6">Database synchronization in progress. Click below to enter the workspace.</p><a href="/" class="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl transition">Connect to Edge</a></div></body></html>`;
-
-// Serve the static SPA index.html directly from the edge on /
+// 1. Remove the old fallbackHtml
+// 2. We'll rely on Cloudflare/Vite to serve index.html
 app.get('/', async (c) => {
   try {
-    // Attempt to pull index.html from Cloudflare Assets Binding first
     const res = await c.env.ASSETS.fetch(c.req.raw);
-    if (res.status === 404) {
-      return c.html(fallbackHtml);
-    }
     return res;
   } catch (err) {
-    return c.html(fallbackHtml);
+    return c.text('Not Found', 404);
   }
 });
 
@@ -242,12 +235,13 @@ app.get('/cdn/:key', async (c) => {
 app.get('*', async (c) => {
   try {
     const res = await c.env.ASSETS.fetch(c.req.raw);
-    if (res.status === 404) {
-      return c.html(fallbackHtml);
+    if (!res.ok) {
+        // Fallback to index.html for SPA routing
+        return await c.env.ASSETS.fetch(new Request(new URL('/', c.req.url)));
     }
     return res;
   } catch (err) {
-    return c.html(fallbackHtml);
+    return c.text('Not Found', 404);
   }
 });
 
