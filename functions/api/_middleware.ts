@@ -4,8 +4,8 @@ export const onRequest: PagesFunction<any> = async (context) => {
   const { request, next, data } = context;
   const url = new URL(request.url);
 
-  // Skip auth for login
-  if (url.pathname === '/api/auth/login' || url.pathname === '/api') {
+  // Skip auth for login and register
+  if (url.pathname === '/api/auth/login' || url.pathname === '/api/auth/register' || url.pathname === '/api') {
     return await next();
   }
 
