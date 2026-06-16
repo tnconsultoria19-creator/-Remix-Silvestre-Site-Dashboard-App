@@ -26,6 +26,6 @@
     }
   ],
   "vars": {
-    "JWT_SECRET": "replace-with-a-very-secure-jwt-secret-in-production"
+    "JWT_SECRET": "olisbel_secret_key_19921108626_secure_edge_2026"
   }
 }
