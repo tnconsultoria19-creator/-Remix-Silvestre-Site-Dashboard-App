@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { apiFetch, setAuthToken, clearAuthToken, getAuthToken } from "../lib/api";
+import { auth, db, googleSignIn, getAccessToken, logoutUser } from "../lib/firebase";
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, collection, getDocs, writeBatch } from "firebase/firestore";
 
 export interface Agent {
   email: string;
@@ -33,9 +34,8 @@ interface AuthContextType {
   agents: Agent[];
   impersonatingFrom: User | null;
   loadAgents: () => Promise<void>;
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string; user?: User }>;
-  register: (email: string, password?: string, name?: string, bypassTraining?: boolean, whatsapp?: string, country?: string, languages?: string, experience?: string) => Promise<User | undefined>;
-  logout: () => void;
+  login: () => Promise<{ success: boolean; error?: string; user?: User }>;
+  logout: () => Promise<void>;
   passQuiz: () => Promise<void>;
   approveUser: () => Promise<void>;
   updateAvatar: (url: string) => Promise<void>;
@@ -57,22 +57,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [impersonatingFrom, setImpersonatingFrom] = useState<User | null>(null);
 
   useEffect(() => {
-    // Attempt to load session if token exists
-    const token = getAuthToken();
-    if (token) {
-      apiFetch("/api/auth/me").then(res => {
-        setUser(res.user);
-      }).catch(() => {
-        clearAuthToken();
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser?.email) {
+        // Fetch or create user in Firestore
+        const userRef = doc(db, "users", firebaseUser.email);
+        const userSnap = await getDoc(userRef);
+        
+        let userData: User;
+        if (userSnap.exists()) {
+          userData = userSnap.data() as User;
+        } else {
+          userData = {
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+            isApproved: false,
+            didPassQuiz: false,
+            isAdmin: false
+          };
+          await setDoc(userRef, userData);
+        }
+        setUser(userData);
+      } else {
         setUser(null);
-      });
-    }
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const loadAgents = async () => {
     if (user?.isAdmin) {
       try {
-        const data = await apiFetch("/api/agents");
+        const querySnapshot = await getDocs(collection(db, "users"));
+        const data = querySnapshot.docs.map(doc => doc.data() as Agent);
         setAgents(data);
       } catch (e) {
         console.error("Failed to load agents", e);
@@ -86,62 +102,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, impersonatingFrom]);
 
-  useEffect(() => {
-    // Session state synchronized
-  }, [impersonatingFrom]);
-
-  const login = async (email: string, password?: string) => {
+  const login = async () => {
     try {
-      const response = await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password })
-      });
-      setUser(response.user);
-      setAuthToken(response.token);
-      return { success: true, user: response.user };
+      const result = await googleSignIn();
+      const firebaseUser = result.user;
+      if (firebaseUser?.email) {
+        const userRef = doc(db, "users", firebaseUser.email);
+        const userSnap = await getDoc(userRef);
+        let userData: User;
+        if (userSnap.exists()) {
+          userData = userSnap.data() as User;
+        } else {
+          userData = {
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || "",
+            isApproved: false,
+            didPassQuiz: false,
+            isAdmin: false
+          };
+          await setDoc(userRef, userData);
+        }
+        setUser(userData);
+        return { success: true, user: userData };
+      }
+      return { success: false, error: "No email returned from Google" };
     } catch (e: any) {
       return { success: false, error: e.message || "Login failed" };
     }
   };
 
-  const register = async (
-    email: string, 
-    password?: string, 
-    name?: string, 
-    bypassTraining?: boolean,
-    whatsapp?: string,
-    country?: string,
-    languages?: string,
-    experience?: string
-  ) => {
+  const logout = async () => {
     try {
-      const response = await apiFetch("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify({
-          email, password, name, bypassTraining, whatsapp, country, languages, experience
-        })
-      });
-      setUser(response.user);
-      setAuthToken(response.user.token);
-      return response.user;
-    } catch (e: any) {
-      throw new Error(e.message || "Registration failed");
+      await logoutUser();
+      setUser(null);
+      setImpersonatingFrom(null);
+    } catch (e) {
+      console.error(e);
     }
-  };
-
-  const logout = () => {
-    setUser(null);
-    setImpersonatingFrom(null);
-    clearAuthToken();
   };
 
   const passQuiz = async () => {
     if (user) {
       try {
-        await apiFetch(`/api/agents/${encodeURIComponent(user.email)}`, {
-          method: "PUT",
-          body: JSON.stringify({ didPassQuiz: true })
-        });
+        await updateDoc(doc(db, "users", user.email), { didPassQuiz: true });
         setUser({ ...user, didPassQuiz: true });
         await loadAgents();
       } catch (e) {
@@ -153,10 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const approveUser = async () => {
     if (user) {
       try {
-        await apiFetch(`/api/agents/${encodeURIComponent(user.email)}`, {
-          method: "PUT",
-          body: JSON.stringify({ isApproved: true })
-        });
+        await updateDoc(doc(db, "users", user.email), { isApproved: true });
         setUser({ ...user, isApproved: true });
         await loadAgents();
       } catch (e) {
@@ -168,10 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateAvatar = async (url: string) => {
     if (user) {
       try {
-        await apiFetch(`/api/agents/${encodeURIComponent(user.email)}`, {
-          method: "PUT",
-          body: JSON.stringify({ avatarUrl: url })
-        });
+        await updateDoc(doc(db, "users", user.email), { avatarUrl: url });
         setUser({ ...user, avatarUrl: url });
         await loadAgents();
       } catch (e) {
@@ -180,17 +177,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Admin capabilities
   const updateAgentProfile = async (email: string, data: Partial<Agent>) => {
     try {
-      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
-        method: "PUT",
-        body: JSON.stringify(data)
-      });
+      await updateDoc(doc(db, "users", email), data);
       await loadAgents();
-      if (user && user.email.toLowerCase() === email.toLowerCase()) {
-        const res = await apiFetch("/api/auth/me");
-        setUser(res);
+      if (user && user.email === email) {
+        setUser({ ...user, ...data } as User);
       }
     } catch (e) {
       console.error("Failed to update agent profile");
@@ -199,12 +191,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const freezeAgentAccount = async (email: string, freeze: boolean) => {
     try {
-      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
-        method: "PUT",
-        body: JSON.stringify({ isFrozen: freeze })
-      });
+      await updateDoc(doc(db, "users", email), { isFrozen: freeze });
       await loadAgents();
-      if (freeze && user && user.email.toLowerCase() === email.toLowerCase()) {
+      if (freeze && user && user.email === email) {
         logout();
       }
     } catch (e) {
@@ -214,11 +203,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const deleteAgentAccount = async (email: string) => {
     try {
-      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
-        method: "DELETE"
-      });
+      await deleteDoc(doc(db, "users", email));
       await loadAgents();
-      if (user && user.email.toLowerCase() === email.toLowerCase()) {
+      if (user && user.email === email) {
         logout();
       }
     } catch (e) {
@@ -228,14 +215,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const toggleAdminRights = async (email: string, enableAdmin: boolean) => {
     try {
-      await apiFetch(`/api/agents/${encodeURIComponent(email)}`, {
-        method: "PUT",
-        body: JSON.stringify({ isAdmin: enableAdmin })
-      });
+      await updateDoc(doc(db, "users", email), { isAdmin: enableAdmin });
       await loadAgents();
-      if (user && user.email.toLowerCase() === email.toLowerCase()) {
-        const res = await apiFetch("/api/auth/me");
-        setUser(res);
+      if (user && user.email === email) {
+        setUser({ ...user, isAdmin: enableAdmin });
       }
     } catch (e) {
        console.error("Failed to toggle admin rights");
@@ -243,23 +226,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const impersonateAgent = (email: string) => {
-    const target = agents.find(a => a.email.toLowerCase() === email.toLowerCase());
+    const target = agents.find(a => a.email === email);
     if (!target) return;
-
     if (!impersonatingFrom && user) {
       setImpersonatingFrom(user);
     }
-
-    const impersonatedUser = {
-      email: target.email,
-      name: target.name,
-      isApproved: target.isApproved,
-      didPassQuiz: target.didPassQuiz,
-      isAdmin: target.isAdmin,
-      isSuperAdmin: target.isSuperAdmin,
-      avatarUrl: target.avatarUrl
-    };
-
+    const impersonatedUser: User = { ...target };
     setUser(impersonatedUser);
   };
 
@@ -277,7 +249,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       impersonatingFrom,
       loadAgents,
       login, 
-      register, 
       logout, 
       passQuiz, 
       approveUser, 
@@ -299,4 +270,5 @@ export function useAuth() {
   if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 }
+
 

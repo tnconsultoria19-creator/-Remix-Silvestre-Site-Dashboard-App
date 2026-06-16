@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useI18n } from "./I18nContext";
-import { apiFetch, getAuthToken } from "../lib/api";
+import { db } from "../lib/firebase";
+import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, arrayUnion } from "firebase/firestore";
+import { useAuth } from "./AuthContext";
 
 export interface ContactPerson {
   name: string;
@@ -46,7 +48,7 @@ export interface Lead {
   payout: number;    // Stored in USD baseline (Commission)
   earningsCurrency: "USD" | "EUR" | "BRL" | "MZN" | "ZAR";
   status: "Available" | "Claimed" | "In Progress" | "Completed" | "Sold";
-  claimedBy?: string; // agent email
+  claimedBy?: string | null; // agent email
   contactPerson: ContactPerson;
   socials: Socials;
   prototypeUrl: string;
@@ -101,34 +103,35 @@ const JobsContext = createContext<JobsContextType | undefined>(undefined);
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { user } = useAuth();
 
   // Enforce master global currency (default "USD")
-  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "EUR" | "BRL" | "MZN" | "ZAR">(("USD"));
+  const [globalCurrency, setGlobalCurrency] = useState<"USD" | "EUR" | "BRL" | "MZN" | "ZAR">("USD");
 
-  const loadLeads = async () => {
-    if (!getAuthToken()) {
+  useEffect(() => {
+    if (!user) {
       setLeads([]);
       return;
     }
-    try {
-      const data = await apiFetch("/api/leads");
+    const unsubscribe = onSnapshot(collection(db, "leads"), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
       setLeads(data);
-    } catch (e) {
-      console.error("Failed to fetch leads");
-    }
-  };
+    }, (error) => {
+      console.error("Firestore leads snapshot error:", error);
+    });
 
-  useEffect(() => {
-    loadLeads();
-  }, []);
+    return () => unsubscribe();
+  }, [user]);
+
+  const loadLeads = async () => {
+    // Relying on onSnapshot. Keep for backwards compatibility
+  };
 
   const addLead = async (lead: Partial<Lead>) => {
     try {
-      await apiFetch("/api/leads", {
-        method: "POST",
-        body: JSON.stringify(lead)
-      });
-      await loadLeads();
+      const newLeadRef = doc(collection(db, "leads"));
+      const newLead = { ...lead, id: newLeadRef.id, notes: lead.notes || [], customFields: lead.customFields || [], uploads: lead.uploads || [] };
+      await setDoc(newLeadRef, newLead);
       setNotifications(prev => [
         { id: Math.random().toString(), message: `New Lead Added: ${lead.name}` },
         ...prev
@@ -140,11 +143,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const updateLead = async (id: string, updated: Partial<Lead>) => {
     try {
-      await apiFetch(`/api/leads/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(updated)
-      });
-      await loadLeads();
+      await updateDoc(doc(db, "leads", id), updated);
     } catch (e) {
       console.error(e);
     }
@@ -152,10 +151,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteLead = async (id: string) => {
     try {
-      await apiFetch(`/api/leads/${id}`, {
-        method: "DELETE"
-      });
-      await loadLeads();
+      await deleteDoc(doc(db, "leads", id));
       setNotifications(prev => [
         { id: Math.random().toString(), message: `Lead ${id} has been permanently deleted.` },
         ...prev
@@ -167,19 +163,17 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const claimLead = async (id: string, agentEmail: string) => {
     try {
-      await apiFetch(`/api/leads/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          status: "Claimed", 
-          claimedBy: agentEmail,
-          newNote: {
-            author: "Platform System",
-            text: `Opportunity claimed by agent (${agentEmail})`,
-            date: new Date().toISOString().slice(0, 10)
-          }
-        })
+      const newNote = {
+        id: Math.random().toString(),
+        author: "Platform System",
+        text: `Opportunity claimed by agent (${agentEmail})`,
+        date: new Date().toISOString().slice(0, 10)
+      };
+      await updateDoc(doc(db, "leads", id), {
+        status: "Claimed",
+        claimedBy: agentEmail,
+        notes: arrayUnion(newNote)
       });
-      await loadLeads();
     } catch (e) {
       console.error(e);
     }
@@ -187,19 +181,17 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const unclaimLead = async (id: string) => {
     try {
-      await apiFetch(`/api/leads/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          status: "Available", 
-          claimedBy: null,
-          newNote: {
-            author: "Platform System",
-            text: `Opportunity released back to Marketplace.`,
-            date: new Date().toISOString().slice(0, 10)
-          }
-        })
+      const newNote = {
+        id: Math.random().toString(),
+        author: "Platform System",
+        text: `Opportunity released back to Marketplace.`,
+        date: new Date().toISOString().slice(0, 10)
+      };
+      await updateDoc(doc(db, "leads", id), {
+        status: "Available",
+        claimedBy: null,
+        notes: arrayUnion(newNote)
       });
-      await loadLeads();
     } catch (e) {
       console.error(e);
     }
@@ -208,19 +200,17 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   const reassignLead = async (id: string, agentEmail: string) => {
     const isSelfunclaim = !agentEmail;
     try {
-      await apiFetch(`/api/leads/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          status: isSelfunclaim ? "Available" : "Claimed", 
-          claimedBy: isSelfunclaim ? null : agentEmail,
-          newNote: {
-            author: "Platform System",
-            text: isSelfunclaim ? "Lead claim cancelled by administrator" : `Lead reassigned by administrator to ${agentEmail}`,
-            date: new Date().toISOString().slice(0, 10)
-          }
-        })
+      const newNote = {
+        id: Math.random().toString(),
+        author: "Platform System",
+        text: isSelfunclaim ? "Lead claim cancelled by administrator" : `Lead reassigned by administrator to ${agentEmail}`,
+        date: new Date().toISOString().slice(0, 10)
+      };
+      await updateDoc(doc(db, "leads", id), {
+        status: isSelfunclaim ? "Available" : "Claimed",
+        claimedBy: isSelfunclaim ? null : agentEmail,
+        notes: arrayUnion(newNote)
       });
-      await loadLeads();
     } catch (e) {
       console.error(e);
     }
@@ -228,17 +218,15 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const addLeadNote = async (leadId: string, text: string, author: string) => {
     try {
-      await apiFetch(`/api/leads/${leadId}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          newNote: {
-            author,
-            text,
-            date: new Date().toISOString().slice(0, 10)
-          }
-        })
+      const newNote = {
+        id: Math.random().toString(),
+        author,
+        text,
+        date: new Date().toISOString().slice(0, 10)
+      };
+      await updateDoc(doc(db, "leads", leadId), {
+        notes: arrayUnion(newNote)
       });
-      await loadLeads();
     } catch(e) {
       console.error(e);
     }
@@ -246,13 +234,10 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const addLeadCustomField = async (leadId: string, title: string, value: string) => {
     try {
-      await apiFetch(`/api/leads/${leadId}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          newCustomField: { id: Math.random().toString(), title, value }
-        })
+      const newCustomField = { id: Math.random().toString(), title, value };
+      await updateDoc(doc(db, "leads", leadId), {
+        customFields: arrayUnion(newCustomField)
       });
-      await loadLeads();
     } catch(e) {
       console.error(e);
     }
@@ -260,24 +245,23 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const uploadLeadFile = async (leadId: string, fileName: string, fileUrl: string, uploadedBy: string) => {
     try {
-      await apiFetch(`/api/leads/${leadId}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          newUpload: {
-             id: "upl-" + Math.random().toString(),
-             name: fileName,
-             url: fileUrl,
-             date: new Date().toISOString().slice(0, 10),
-             uploadedBy
-          },
-          newNote: {
-            author: uploadedBy,
-            text: `Uploaded File Deliverable: ${fileName}`,
-            date: new Date().toISOString().slice(0, 10)
-          }
-        })
+      const newUpload = {
+        id: "upl-" + Math.random().toString(),
+        name: fileName,
+        url: fileUrl,
+        date: new Date().toISOString().slice(0, 10),
+        uploadedBy
+      };
+      const newNote = {
+        id: Math.random().toString(),
+        author: uploadedBy,
+        text: `Uploaded File Deliverable: ${fileName}`,
+        date: new Date().toISOString().slice(0, 10)
+      };
+      await updateDoc(doc(db, "leads", leadId), {
+        uploads: arrayUnion(newUpload),
+        notes: arrayUnion(newNote)
       });
-      await loadLeads();
     } catch (e) {
       console.error(e);
     }
@@ -285,22 +269,20 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
 
   const issueCommissionPayment = async (leadId: string, proofName: string, proofUrl: string) => {
     try {
-      await apiFetch(`/api/leads/${leadId}`, {
-        method: "PUT",
-        body: JSON.stringify({ 
-          commissionPaid: true,
-          commissionPaidDate: new Date().toISOString().slice(0, 10),
-          commissionProofName: proofName,
-          commissionProofUrl: proofUrl,
-          status: "Sold",
-          newNote: {
-            author: "Platform System",
-            text: `Commission Paid successfully. Proof of Payment uploaded: ${proofName}`,
-            date: new Date().toISOString().slice(0, 10)
-          }
-        })
+      const newNote = {
+        id: Math.random().toString(),
+        author: "Platform System",
+        text: `Commission Paid successfully. Proof of Payment uploaded: ${proofName}`,
+        date: new Date().toISOString().slice(0, 10)
+      };
+      await updateDoc(doc(db, "leads", leadId), {
+        commissionPaid: true,
+        commissionPaidDate: new Date().toISOString().slice(0, 10),
+        commissionProofName: proofName,
+        commissionProofUrl: proofUrl,
+        status: "Sold",
+        notes: arrayUnion(newNote)
       });
-      await loadLeads();
       setNotifications(prev => [
         { id: Math.random().toString(), message: `Commission paid out for lead ${leadId}` },
         ...prev
@@ -314,7 +296,6 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // Convert USD Price to display in target currency (ALWAYS defaults to global master currency)
   const convertPrice = (amountInUSD: number, targetCurrency?: string) => {
     const finalCurrency = globalCurrency;
     const rates: Record<string, { symbol: string; rate: number; isSuffix?: boolean }> = {

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useJobs } from "../store/JobsContext";
 import { useAuth } from "../store/AuthContext";
 import { motion, AnimatePresence } from "motion/react";
+import { getAccessToken } from "../lib/firebase";
 
 export function TaskDetail() {
   const { id } = useParams();
@@ -14,7 +15,6 @@ export function TaskDetail() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fallback / find the correct lead
   const lead = leads.find(l => l.id === id) || leads[0];
 
   if (!lead) {
@@ -37,7 +37,6 @@ export function TaskDetail() {
 
   const claimStatus = lead.status;
   
-  // Available statuses for pipeline movement
   const statusesOrder: Array<"Available" | "Claimed" | "In Progress" | "Completed" | "Sold"> = [
     "Available", 
     "Claimed", 
@@ -77,19 +76,38 @@ export function TaskDetail() {
 
   const processAndUpload = async (file: File) => {
     try {
+      const token = await getAccessToken();
+      if (!token) {
+        alert("Missing Google Workspace access token. Please sign out and sign in again.");
+        return;
+      }
+      const metadata = { name: file.name, mimeType: file.type || 'application/pdf' };
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      formData.append('file', file);
       
-      const { apiFetch } = await import("../lib/api");
-      const res = await apiFetch("/api/upload", {
-        method: "POST",
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
+      const data = await res.json();
       
-      if (res.success && res.url) {
-        await uploadLeadFile(lead.id, file.name, res.url, user?.name || user?.email || "Agent");
+      await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'anyone', role: 'reader' })
+      });
+      
+      const linkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}?fields=webViewLink`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const linkData = await linkRes.json();
+      
+      if (linkData.webViewLink) {
+        await uploadLeadFile(lead.id, file.name, linkData.webViewLink, user?.name || user?.email || "Agent");
       } else {
-        alert("Upload failed: " + (res.error || "Unknown error"));
+        alert("Upload failed: Could not get public link");
       }
     } catch (err: any) {
       alert("Error uploading file: " + err.message);
