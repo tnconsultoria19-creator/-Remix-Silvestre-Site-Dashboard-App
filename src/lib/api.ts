@@ -1,6 +1,6 @@
 // API utility to handle Cloudflare Worker requests
 
-export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "https://remixsilvestresitedashboardapp.tnconsultoria19.workers.dev";
+export const API_BASE = "";
 
 export function getAuthToken() {
   const name = "token=";
@@ -51,7 +51,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   if (!response.ok) {
     let errorMessage = `HTTP Error ${response.status}`;
     try {
-      const errorData = await response.json();
+      const errorData: any = await response.json();
       errorMessage = errorData.error || errorMessage;
     } catch (e) {
       // Not JSON
@@ -64,7 +64,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     return null;
   }
   
-  return response.json();
+  return response.json() as Promise<any>;
 }
 
 export async function getKV(key: string) {

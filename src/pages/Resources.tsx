@@ -105,12 +105,11 @@ export function Resources() {
   // Pass single module quiz handler
   const setModuleQuizPassed = (modId: number) => {
     // Mark quiz as passed by passing the main academy quiz
-    passQuiz();
+    alert("Well done! You passed the Module quiz and unlocked certification eligibility.");
     setActiveQuizModuleId(null);
     setQuizAnswers({});
     setQuizGraded(false);
     loadData();
-    alert("Well done! You passed the Module quiz and unlocked certification eligibility.");
   };
 
   // Grading logic for interactive quizzes
