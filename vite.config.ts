@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(async () => {
   return {
-    base: process.env.NODE_ENV === "production" ? "/-Remix-Silvestre-Site-Dashboard-App/" : "/",
+    base: "/",
     plugins: [
       react(), 
       tailwindcss(),

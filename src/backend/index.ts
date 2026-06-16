@@ -318,13 +318,19 @@ app.get('/cdn/:key', async (c) => {
   return new Response(object.body as any, { headers });
 });
 
-// SPA Fallback for generic routes managed by React Router
+// SPA Fallback and Static Assets
 app.get('*', async (c) => {
-  const url = new URL(c.req.url);
-  url.pathname = '/index.html';
-  
   if (c.env.ASSETS) {
-    return c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
+    // Attempt to fetch the static asset first
+    let response = await c.env.ASSETS.fetch(c.req.raw);
+    
+    // If exact file not found, serve index.html for SPA routing
+    if (response.status === 404) {
+      const url = new URL(c.req.url);
+      url.pathname = '/index.html';
+      response = await c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
+    }
+    return response;
   }
   return new Response("Not found", { status: 404 });
 });
